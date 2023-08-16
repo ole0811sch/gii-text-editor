@@ -1,0 +1,12 @@
+INIT/
+SDCard/
+Debug/
+
+*.dlr
+*.G1A
+*.dlw
+*g1w
+tmp
+
+FXSH_Build.bat
+AddinInfo.txt

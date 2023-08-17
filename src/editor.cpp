@@ -21,40 +21,72 @@ extern "C" {
 #define CODE_LEFT -5
 #define CODE_RIGHT -6
 
+typedef struct {
+	size_t line;
+	size_t col;
+} line_col_t;
+
+
+#define VLINE_INDEX_STATIC_ARR_SIZE 4
+
+/**
+ * stores any number of size_t values. If they're at most 
+ * VLINE_INDEX_STATIC_ARR_SIZE, they are stored in a static array, otherwise in
+ * a dynamic array.
+ */
+typedef union {
+	size_t s_arr[VLINE_INDEX_STATIC_ARR_SIZE];
+	dyn_arr_size_t d_arr;
+} vline_index_t;
+
+typedef struct {
+	/**
+	 * Number of softbreaks in this line. If count is at most 
+	 * VLINE_INDEX_STATIC_ARR_SIZE, vline_index stores the indices in s_arr,
+	 * otherwise in d_arr.
+	 */
+	size_t count_softbreaks;
+	/** 
+	 * index of the line that's printed where this line starts. One line with
+	 * one soft break correspond to two vlines.
+	 */
+	size_t vline_begin;
+	/**
+	 * indices of the softbreaks. Represented as the index of the first char in
+	 * the new vline
+	 */
+	vline_index_t vline_index;
+	/**
+	 * text of the line. Does not include '\n', not NUL-terminated.
+	 */
+	dyn_arr_char_t string;
+} line_t;
+
 // static function declarations
-static void 
-print_char_xy(unsigned char x, unsigned char y, char c, char negative);
+static void print_char_xy(unsigned char x, unsigned char y, char c, 
+		char negative);
 static void print_char(char_point_t point, char c, char negative);
 static void initialize_lines(const char* str);
 static void print_lines();
 static void print_chars(unsigned char x, unsigned char y, const char* str);
+static char line_col_to_point(line_col_t line_col, point_t* point);
+static size_t line_col_to_vline(line_col_t line_col, unsigned char* x);
+static int key_code_to_ascii(unsigned int code);
+static void handle_char(char c);
+static void handle_cursor_move(int move);
+static void	handle_cursor_move_vertical(int move);
+static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks);
 
 
+// static variables
+
+static char dbg_buf[256];
 
 static char capitalization_on = 0;
 static char capitalization_on_locked = 0;
-typedef struct {
-	size_t line;
-	size_t column;
-} line_col_t;
 static line_col_t cursor_pos = { 0, 0 };
 static unsigned char cursor_x_target = 0;
 
-/**
- * the plus one is necessary to distinguish softbreaks from line breaks. Each 
- * line contains the chars and if it ends with a line break that as well. All
- * chars after that are '\0'. The last char must be either '\0' (soft break) or
- * '\n' (line break)
- */
-// static char lines[EDITOR_LINES][EDITOR_COLUMNS + 1];
-
-typedef struct {
-	// index of the line that's printed where this line starts. One line with
-	// one soft break correspond to two vlines.
-	size_t vline_begin;
-	// text of the line. Does not include '\n', not NUL-terminated.
-	dyn_arr_char_t string;
-} line_t;
 
 #undef DYN_ARR_H_
 #define DYN_ARR_IMPLEMENTATION
@@ -69,10 +101,6 @@ typedef struct {
  * starting with line 0, ordered.
  */
 static dyn_arr_line_t lines;
-/**
- * number of vlines in total (not only those that are visible)
- */
-static size_t vlines_count;
 
 /**
  * first visible vline
@@ -173,11 +201,12 @@ static void correct_char_pos(char horizontal_move) {
  * mode = 1: print, mode = 0: erase
  */
 static void move_cursor(char mode) {
-	/*
-	point_t px = char_point_to_point(cursor_pos);
+	point_t px;
+	if (!line_col_to_point(cursor_pos, &px))
+		return;
+
 	for (int y = -1; y < (int) CHAR_HEIGHT; ++y)
 		Bdisp_SetPoint_DDVRAM(px.x - 1, px.y + y, mode);
-		*/
 }
 
 void initialize_editor(const char* content) { 
@@ -185,58 +214,137 @@ void initialize_editor(const char* content) {
 	initialize_lines(content);
 	print_lines();
 
-	unsigned int key;
-	while (1)
-		GetKey(&key);
-	/*
+	cursor_pos.line = 4;
+	cursor_pos.col = 0;
+
 	move_cursor(1);
+
+	
 	while (1) {
 		unsigned int key;
 		GetKey(&key);
 		int c = key_code_to_ascii(key);
-		if (c >= 0) {
+		if (c >= 0)
 			handle_char((char) c);
-			// char char_str[] = { (char) c, '\0' };
-			// print_chars(0, EDITOR_LINES - 1, char_str);
-		} else if (c <= CODE_UP && c >= CODE_RIGHT) {
-			move_cursor(0);
-			char horizontal_move = 1;
-			char moved = 1;
-			switch (c) {
-				case CODE_UP:
-					if (cursor_pos.y > 0)
-						--cursor_pos.y;
-					else
-						moved = 0;
-					horizontal_move = 0;
-					break;
-				case CODE_DOWN:
-					if (cursor_pos.y < EDITOR_LINES - 1)
-						++cursor_pos.y;
-					else
-						moved = 0;
-					horizontal_move = 0;
-					break;
-				case CODE_LEFT:
-					if (cursor_pos.x > 0)
-						--cursor_pos.x;
-					else
-						moved = 0;
-					break;
-				case CODE_RIGHT:
-					if (cursor_pos.x < EDITOR_COLUMNS - 1)
-						++cursor_pos.x;
-					else
-						moved = 0;
-					break;
+		else if (c <= CODE_UP && c >= CODE_RIGHT)
+			handle_cursor_move(c);
+	}
+}
+
+static void handle_cursor_move(int move) {
+	move_cursor(0);
+	char is_horizontal = 1;
+	switch (move) {
+		case CODE_LEFT:
+			if (cursor_pos.col > 0) {
+				--cursor_pos.col;
+				line_col_to_vline(cursor_pos, &cursor_x_target);
 			}
-			if (moved)
-				correct_char_pos(horizontal_move);
-			
-			move_cursor(1);
+			break;
+		case CODE_RIGHT:
+			if (cursor_pos.col < lines.arr[cursor_pos.line].string.count) {
+				++cursor_pos.col;
+				line_col_to_vline(cursor_pos, &cursor_x_target);
+			}
+			break;
+		default:
+			handle_cursor_move_vertical(move);
+			is_horizontal = 0;
+	}
+
+	// if (moved)
+		// correct_char_pos(horizontal_move);
+	move_cursor(1);
+}
+
+/**
+ * updates cursor_pos according to move
+ */
+static void	handle_cursor_move_vertical(int move) {
+	size_t count_softbreaks;
+	size_t* vline_starts_old = // vline starts of old line of cursor
+		get_vline_starts(&lines.arr[cursor_pos.line], &count_softbreaks);
+	size_t new_line_i;
+	// offset of the vline of the new position relative to the line's
+	// vline_begin
+	size_t new_vline_offs; 
+	unsigned char x;
+
+	if (move == CODE_UP) {
+		if (vline_starts_old == NULL 
+				|| cursor_pos.col < vline_starts_old[0]) { 
+			// in first vline of line
+			if (cursor_pos.line == 0)
+				return;
+			new_line_i = cursor_pos.line - 1;
+			new_vline_offs = lines.arr[new_line_i].count_softbreaks;
+			x = cursor_pos.col;
+		}
+		else { // we stay in the same line
+			new_line_i = cursor_pos.line;
+			size_t current_vline = line_col_to_vline(cursor_pos, &x);
+			new_vline_offs = current_vline - lines.arr[new_line_i].vline_begin 
+				- 1;
 		}
 	}
-	*/
+	else { // down
+		if (vline_starts_old == NULL 
+				|| cursor_pos.col >= vline_starts_old[count_softbreaks - 1]) { 
+			// last vline of line
+			if (cursor_pos.line == lines.count - 1)
+				return;
+			new_line_i = cursor_pos.line + 1;
+			new_vline_offs = 0;
+			x = cursor_pos.col;
+		}
+		else { // we stay in the same line
+			new_line_i = cursor_pos.line;
+			size_t current_vline = line_col_to_vline(cursor_pos, &x);
+			new_vline_offs = current_vline - lines.arr[new_line_i].vline_begin 
+				+ 1;
+		}
+	}
+
+	if (cursor_x_target > x)
+		x = cursor_x_target;
+
+	line_t* new_line = &lines.arr[new_line_i];
+	size_t count_softbreaks_new;
+	size_t* vline_starts_new = // vline starts of new line of cursor
+		get_vline_starts(new_line, &count_softbreaks_new);
+
+	// figure out cursor_pos.col
+	size_t begin_i; // index in line of first char in vline
+	if (new_vline_offs == 0)
+		begin_i = 0;
+	else
+		begin_i = vline_starts_new[new_vline_offs - 1];
+	// number of chars in vline
+	size_t vline_length = new_line->string.count - begin_i;
+	if (x >= vline_length) { // there is no char at x pos in the vline
+		// cursor_pos.col is after last char in line
+		cursor_pos.col = new_line->string.count;
+	}
+	else {
+		cursor_pos.col = begin_i + x;
+	}
+
+	cursor_pos.line = new_line_i;
+}
+
+/**
+ * returns the array in the vline_index of line. If there are no softbreaks,
+ * NULL is returned. If count_softbreaks isn't NULL, it is set.
+ */
+static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks) {
+	if (count_softbreaks != NULL)
+		*count_softbreaks = line->count_softbreaks;
+	if (line->count_softbreaks == 0)
+		return NULL;
+	else if (line->count_softbreaks <= VLINE_INDEX_STATIC_ARR_SIZE)
+		return line->vline_index.s_arr;
+	else
+		return line->vline_index.d_arr.arr;
 }
 
 /**
@@ -244,7 +352,7 @@ void initialize_editor(const char* content) {
  * any ascii code, or -3 to -6 (CODE_{UP, DOWN, RIGHT, LEFT}) when the
  * navigation buttons were used. Backspace is '\x08', enter is '\n'.
  */
-int key_code_to_ascii(unsigned int code) {
+static int key_code_to_ascii(unsigned int code) {
 	const signed char capitalization_once = -1;
 	const signed char capitalization_lock = -2;
 #define EASY_CASES \
@@ -362,19 +470,64 @@ int key_code_to_ascii(unsigned int code) {
 }
 
 /**
- * returns pixel coordinate of top left corner of that character coordinate.
- * If point is outside of editor space, (-1, -1) is returned.
+ * if x isn't null, it is set to the char_point_t x value that line_col
+ * corresponds to.
  */
-static point_t char_point_to_point(char_point_t point) {
-	if (point.x > EDITOR_COLUMNS || point.y > EDITOR_LINES) {
-		point_t err_point = { (unsigned char) -1, (unsigned char) -1 };
-		return err_point;
+static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
+	line_t* line = &lines.arr[line_col.line];
+	if (line->count_softbreaks == 0) {
+		// line is contained in one vline
+		if (x != NULL)
+			*x = line_col.col;
+		return line->vline_begin;
 	}
 
+
+	// find the correct array
+	size_t* vline_starts = get_vline_starts(line, NULL);
+
+	// check if the the cursor is in first vline of the line
+	if (line_col.col < vline_starts[0]) {
+		if (x != NULL)
+			*x = line_col.col;
+		return line->vline_begin;
+	}
+
+	size_t vline_index = dyn_arr_size_raw_bsearch(vline_starts, 
+			line->count_softbreaks, line_col.col);
+
+	if (x != NULL)
+		*x = line_col.col - vline_starts[vline_index];
+	return vline_index + 1 + line->vline_begin;
+}
+
+/**
+ * returns pixel coordinate of top left corner of that character coordinate.
+ */
+static point_t char_point_to_point(char_point_t point) {
 	point_t ret_val = { EDITOR_LEFT, EDITOR_TOP };
 	ret_val.x += point.x * CHAR_WIDTH_OUTER + MARGIN_LEFT;
 	ret_val.y += point.y * CHAR_HEIGHT_OUTER + MARGIN_TOP;
 	return ret_val;
+}
+
+/**
+ * returns whether line_col is currently even visible
+ * If line_col is visible, point is set to the pixel coordinate of top left 
+ * corner of that character coordinate.
+ */
+static char line_col_to_point(line_col_t line_col, point_t* point) {
+	unsigned char x;
+	size_t vline = line_col_to_vline(line_col, &x);
+	
+	if (vline < vvlines_begin || vline >= vvlines_begin + EDITOR_LINES)
+		return 0;
+
+	char_point_t ch_point;
+	ch_point.x = x;
+	ch_point.y = vline - vvlines_begin;
+	*point = char_point_to_point(ch_point);
+	return 1;
 }
 
 /**
@@ -383,10 +536,33 @@ static point_t char_point_to_point(char_point_t point) {
 static void add_new_line(size_t vline_begin) {
 	line_t new_line;
 	new_line.vline_begin = vline_begin;
+	new_line.count_softbreaks = 0;
 	dyn_arr_line_add(&lines, new_line);
 	dyn_arr_char_t* string = &DYN_ARR_LAST(&lines)->string;
 	if (dyn_arr_char_create(1, 2, 1, string) == -1)
 		display_error("Out of memory", 1);
+}
+
+/**
+ * adds an entry to vline_index of current_line with index i
+ */
+static void add_softbreak_to_index(line_t* current_line, size_t i) {
+	if (current_line->count_softbreaks < 
+			VLINE_INDEX_STATIC_ARR_SIZE) { // put into s_arr
+		current_line->vline_index.s_arr[current_line->count_softbreaks] = i;
+	}
+	else {
+		dyn_arr_size_t* d_arr = &current_line->vline_index.d_arr;
+		if (current_line->count_softbreaks == VLINE_INDEX_STATIC_ARR_SIZE) {
+			// move s_arr to d_arr
+			dyn_arr_size_create(VLINE_INDEX_STATIC_ARR_SIZE + 1, 2, 1, d_arr);
+			dyn_arr_size_add_all(d_arr, current_line->vline_index.s_arr, 
+					VLINE_INDEX_STATIC_ARR_SIZE);
+		}
+
+		dyn_arr_size_add(d_arr, i);
+	}
+	++current_line->count_softbreaks;
 }
 
 /**
@@ -404,9 +580,11 @@ static void initialize_lines(const char* str) {
 	unsigned char col = 0;
 	size_t vline = 0;
 	size_t i = 0;
+	size_t line_starting_index = 0; // index of the first char in str in line
 	for (; str[i]; ++i) {
 		if (str[i] == '\n') {
 			++vline;
+			line_starting_index = i + 1;
 			add_new_line(vline);
 			current_line = DYN_ARR_LAST(&lines);
 			col = 0;
@@ -417,23 +595,26 @@ static void initialize_lines(const char* str) {
 			if (col >= EDITOR_COLUMNS) { 
 				col = 0;
 				++vline;
+				add_softbreak_to_index(current_line, i - line_starting_index);
 			}
 			dyn_arr_char_add(&current_line->string, str[i]);
 			++col;
 		}
 	}
-	vlines_count = vline + 1;
 }
 
 static void print_line(size_t line_i) {
 	line_t* line = &lines.arr[line_i];
 	size_t vvline_end;	// exclusive, end of the visible vlines of this line
-	if (lines.count - 1 <= line_i) // last line
-		vvline_end = vlines_count;
+	if (line_i == lines.count - 1) { // line_i is the last line 
+		line_t* last_line = DYN_ARR_LAST(&lines);
+		vvline_end = last_line->vline_begin + last_line->count_softbreaks + 1;
+	}
 	else
 		vvline_end = lines.arr[line_i + 1].vline_begin;
 
-	if (vvline_end > vvlines_begin + EDITOR_LINES)
+	if (vvline_end > vvlines_begin + EDITOR_LINES) 
+		// line ends outside of visible area
 		vvline_end = vvlines_begin + EDITOR_LINES;
 
 	size_t char_i = 0; // index in the string

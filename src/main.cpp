@@ -38,7 +38,7 @@ jmp_buf error_jmp;
 static const char* str = "\
 #include <stdio.h>\n\
 int main(void) {\n\
-	printf(\"Hello World mmm\"); return 0;\n\
+    printf(\"Hello World mmm\"); return 0;\n\
 }\n\
 abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYYYZ1234567890!@#$%^&*()_+-=]\
 [;'\\/.,<>?|\":}{~`";

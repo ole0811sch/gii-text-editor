@@ -117,14 +117,14 @@ PFX void DYN_ARR_DESTROY(DYN_ARR_T* dyn_arr);
  * supplied element, then 0 is returned as well.
  * It uses <, = and > for comparisons. If dyn_arr is empty, 0 is returned.
  */
-PFX size_t DYN_ARR_BSEARCH(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element);
+PFX size_t DYN_ARR_BSEARCH(const DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element);
 
 /**
  * name: dyn_arr_$type_raw_bsearch
  * n is the size of arr. 
  * Like the non-raw version, but you directly supply the array
  */
-PFX size_t DYN_ARR_RAW_BSEARCH(DYN_ARR_CG_TYPE* arr, size_t n, DYN_ARR_CG_TYPE element);
+PFX size_t DYN_ARR_RAW_BSEARCH(const DYN_ARR_CG_TYPE* arr, size_t n, DYN_ARR_CG_TYPE element);
 #endif // DYN_ARR_CG_SIMPLE_COMPARISON
 
 /**
@@ -134,8 +134,8 @@ PFX size_t DYN_ARR_RAW_BSEARCH(DYN_ARR_CG_TYPE* arr, size_t n, DYN_ARR_CG_TYPE e
  * <0 when cb_arg comes before other, 0 when they are equal with this key, and
  * >0 when cb_arg comes after other.
  */
-PFX size_t DYN_ARR_BSEARCH_CB(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* cb_arg, 
-		signed int (*callback) (const DYN_ARR_CG_TYPE* cb_arg, 
+PFX size_t DYN_ARR_BSEARCH_CB(const DYN_ARR_T* dyn_arr, const void* cb_arg, 
+		int (*callback) (const void* cb_arg, 
 			const DYN_ARR_CG_TYPE* other));
 
 /**
@@ -143,9 +143,9 @@ PFX size_t DYN_ARR_BSEARCH_CB(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* cb_arg,
  * n is the size of arr. 
  * Like the non-raw version, but you directly supply the array
  */
-PFX size_t DYN_ARR_RAW_BSEARCH_CB(DYN_ARR_CG_TYPE* arr, size_t n, 
-		DYN_ARR_CG_TYPE* cb_arg, 
-		signed int (*callback) (const DYN_ARR_CG_TYPE* cb_arg, 
+PFX size_t DYN_ARR_RAW_BSEARCH_CB(const DYN_ARR_CG_TYPE* arr, size_t n, 
+		const void* cb_arg, 
+		int (*callback) (const void* cb_arg, 
 			const DYN_ARR_CG_TYPE* other));
 
 #ifdef __cplusplus
@@ -200,8 +200,8 @@ PFX int DYN_ARR_CREATE(size_t initial_capacity,
 }
 
 static int _DYN_ARR_CHANGE_SIZE(DYN_ARR_T* dyn_arr, size_t new_capacity) {
-	DYN_ARR_CG_TYPE* arr = (DYN_ARR_CG_TYPE*) 
-		DYN_ARR_CG_REALLOC(dyn_arr->arr, new_capacity * sizeof(DYN_ARR_CG_TYPE));
+	DYN_ARR_CG_TYPE* arr = (DYN_ARR_CG_TYPE*) DYN_ARR_CG_REALLOC(
+				dyn_arr->arr, new_capacity * sizeof(DYN_ARR_CG_TYPE));
 	if (arr == NULL)
 		return -1;
 
@@ -266,7 +266,7 @@ PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* arr, size_t n) {
 			return -1;
 	}
 
-	memcpy(dyn_arr->arr + dyn_arr->count, arr, n);
+	memcpy(dyn_arr->arr + dyn_arr->count, arr, n * sizeof(DYN_ARR_CG_TYPE));
 	dyn_arr->count += n;
 	return 0;
 }
@@ -298,11 +298,11 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr) {
 }
 
 #ifdef DYN_ARR_CG_SIMPLE_COMPARISON
-PFX size_t DYN_ARR_BSEARCH(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
+PFX size_t DYN_ARR_BSEARCH(const DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
 	return DYN_ARR_RAW_BSEARCH(dyn_arr->arr, dyn_arr->count, element);
 }
 
-PFX size_t DYN_ARR_RAW_BSEARCH(DYN_ARR_CG_TYPE* arr, size_t n, 
+PFX size_t DYN_ARR_RAW_BSEARCH(const DYN_ARR_CG_TYPE* arr, size_t n, 
 		DYN_ARR_CG_TYPE element) {
 	size_t begin = 0;
 	size_t end = n;
@@ -320,16 +320,16 @@ PFX size_t DYN_ARR_RAW_BSEARCH(DYN_ARR_CG_TYPE* arr, size_t n,
 }
 #endif // DYN_ARR_CG_SIMPLE_COMPARISON
 
-PFX size_t DYN_ARR_BSEARCH_CB(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* cb_arg, 
-		int (*callback) (const DYN_ARR_CG_TYPE* cb_arg, 
+PFX size_t DYN_ARR_BSEARCH_CB(const DYN_ARR_T* dyn_arr, const void* cb_arg, 
+		int (*callback) (const void* cb_arg, 
 			const DYN_ARR_CG_TYPE* other)) {
 	return DYN_ARR_RAW_BSEARCH_CB(dyn_arr->arr, dyn_arr->count, cb_arg, 
 			callback);
 }
 
-PFX size_t DYN_ARR_RAW_BSEARCH_CB(DYN_ARR_CG_TYPE* arr, size_t n, 
-		DYN_ARR_CG_TYPE* cb_arg, 
-		signed int (*callback) (const DYN_ARR_CG_TYPE* cb_arg, 
+PFX size_t DYN_ARR_RAW_BSEARCH_CB(const DYN_ARR_CG_TYPE* arr, size_t n, 
+		const void* cb_arg, 
+		int (*callback) (const void* cb_arg, 
 			const DYN_ARR_CG_TYPE* other)) {
 	size_t begin = 0;
 	size_t end = n;

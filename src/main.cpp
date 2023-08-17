@@ -40,8 +40,19 @@ static const char* str = "\
 int main(void) {\n\
     printf(\"Hello World mmm\"); return 0;\n\
 }\n\
-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYYYZ1234567890!@#$%^&*()_+-=]\
-[;'\\/.,<>?|\":}{~`";
+0\n\
+1\n\
+2\n\
+3\n\
+4\n\
+5\n\
+6\n\
+7\n\
+8\n\
+9\n\
+10 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras quis feugiat purus. Etiam commodo luctus odio sed imperdiet. Sed vulputate tristique neque, at auctor diam dignissim eu. Ut ac rhoncus neque. Aenean varius luctus lectus. Mauris sit amet felis sagittis, molestie tortor at, pellentesque ipsum. Ut non rhoncus ligula. Maecenas vulputate ullamcorper elit, eget iaculis sem scelerisque id. Proin tincidunt facilisis elit, ut auctor nibh scelerisque iaculis. Nunc pharetra velit id tempor semper. In quis nulla blandit, pulvinar sapien eget, iaculis nunc. Ut nunc magna, pellentesque vitae hendrerit in, lacinia ac urna. Nulla suscipit, quam at commodo viverra, purus purus scelerisque augue, at pellentesque odio nisi quis augue. Nam facilisis neque tortor, eget imperdiet eros pharetra nec.\n\
+\n\
+Maecenas pellentesque magna in condimentum laoreet. Ut venenatis justo non libero porttitor rhoncus non ut arcu. Aliquam venenatis sed mi id iaculis. Suspendisse vel ligula laoreet, iaculis libero vel, egestas nunc. Fusce eget viverra dolor. Quisque sodales molestie elit, ut condimentum dui consequat in. Pellentesque in sodales ex. Nullam consectetur iaculis lectus. Nam vitae molestie justo. Ut dignissim lorem justo, ac ullamcorper nisi vehicula at. Cras non sollicitudin felis. ";
 
 int AddIn_main(int isAppli, unsigned short OptionNum)
 {

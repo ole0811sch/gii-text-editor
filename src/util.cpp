@@ -1,12 +1,9 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include "fxlib.h"
-#ifdef __cplusplus
-}
-#endif
 #include <setjmp.h>
 #include "main.h"
+#include "util.h"
+
+char dbg_buf[256];
+
 
 void display_error(const char* msg, int n) {
 	PopUpWin(6);
@@ -34,3 +31,4 @@ void display_error(const char* msg, int n) {
 	while ((GetKey(&key), key != KEY_CTRL_EXIT));
 	longjmp(error_jmp, 1);
 }
+

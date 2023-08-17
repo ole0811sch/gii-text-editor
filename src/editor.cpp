@@ -22,8 +22,10 @@ extern "C" {
 #define CODE_RIGHT -6
 
 typedef struct {
+	// index of line (in lines)
 	size_t line;
-	size_t col;
+	// index of the char in the line's string
+	size_t char_i;
 } line_col_t;
 
 
@@ -80,7 +82,6 @@ static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks);
 
 // static variables
 
-static char dbg_buf[256];
 
 static char capitalization_on = 0;
 static char capitalization_on_locked = 0;
@@ -215,7 +216,7 @@ void initialize_editor(const char* content) {
 	print_lines();
 
 	cursor_pos.line = 4;
-	cursor_pos.col = 0;
+	cursor_pos.char_i = 0;
 
 	move_cursor(1);
 
@@ -231,20 +232,44 @@ void initialize_editor(const char* content) {
 	}
 }
 
+/**
+ * if cursor_vline is before the first vvline, it adjusts vvlines so that 
+ * cursor_vline is the first vvline
+ */
+static void scroll_up(size_t cursor_vline) {
+	if (cursor_vline < vvlines_begin) {
+		vvlines_begin = cursor_vline;
+		print_lines();
+	}
+}
+
+/**
+ * if cursor_vline is after the last vvline, it adjusts vvlines so that 
+ * cursor_vline is the last vvline
+ */
+static void scroll_down(size_t cursor_vline) {
+	if (cursor_vline >= vvlines_begin + EDITOR_LINES) {
+		vvlines_begin = cursor_vline - EDITOR_LINES + 1;
+		print_lines();
+	}
+}
+
 static void handle_cursor_move(int move) {
 	move_cursor(0);
 	char is_horizontal = 1;
 	switch (move) {
 		case CODE_LEFT:
-			if (cursor_pos.col > 0) {
-				--cursor_pos.col;
-				line_col_to_vline(cursor_pos, &cursor_x_target);
+			if (cursor_pos.char_i > 0) {
+				--cursor_pos.char_i;
+				size_t vline = line_col_to_vline(cursor_pos, &cursor_x_target);
+				scroll_up(vline);
 			}
 			break;
 		case CODE_RIGHT:
-			if (cursor_pos.col < lines.arr[cursor_pos.line].string.count) {
-				++cursor_pos.col;
-				line_col_to_vline(cursor_pos, &cursor_x_target);
+			if (cursor_pos.char_i < lines.arr[cursor_pos.line].string.count) {
+				++cursor_pos.char_i;
+				size_t vline = line_col_to_vline(cursor_pos, &cursor_x_target);
+				scroll_down(vline);
 			}
 			break;
 		default:
@@ -272,13 +297,13 @@ static void	handle_cursor_move_vertical(int move) {
 
 	if (move == CODE_UP) {
 		if (vline_starts_old == NULL 
-				|| cursor_pos.col < vline_starts_old[0]) { 
+				|| cursor_pos.char_i < vline_starts_old[0]) { 
 			// in first vline of line
 			if (cursor_pos.line == 0)
 				return;
 			new_line_i = cursor_pos.line - 1;
 			new_vline_offs = lines.arr[new_line_i].count_softbreaks;
-			x = cursor_pos.col;
+			x = cursor_pos.char_i;
 		}
 		else { // we stay in the same line
 			new_line_i = cursor_pos.line;
@@ -289,13 +314,13 @@ static void	handle_cursor_move_vertical(int move) {
 	}
 	else { // down
 		if (vline_starts_old == NULL 
-				|| cursor_pos.col >= vline_starts_old[count_softbreaks - 1]) { 
+				|| cursor_pos.char_i >= vline_starts_old[count_softbreaks - 1]) { 
 			// last vline of line
 			if (cursor_pos.line == lines.count - 1)
 				return;
 			new_line_i = cursor_pos.line + 1;
 			new_vline_offs = 0;
-			x = cursor_pos.col;
+			line_col_to_vline(cursor_pos, &x);
 		}
 		else { // we stay in the same line
 			new_line_i = cursor_pos.line;
@@ -313,7 +338,7 @@ static void	handle_cursor_move_vertical(int move) {
 	size_t* vline_starts_new = // vline starts of new line of cursor
 		get_vline_starts(new_line, &count_softbreaks_new);
 
-	// figure out cursor_pos.col
+	// figure out cursor_pos.char_i
 	size_t begin_i; // index in line of first char in vline
 	if (new_vline_offs == 0)
 		begin_i = 0;
@@ -322,14 +347,19 @@ static void	handle_cursor_move_vertical(int move) {
 	// number of chars in vline
 	size_t vline_length = new_line->string.count - begin_i;
 	if (x >= vline_length) { // there is no char at x pos in the vline
-		// cursor_pos.col is after last char in line
-		cursor_pos.col = new_line->string.count;
+		// cursor_pos.char_i is after last char in line
+		cursor_pos.char_i = new_line->string.count;
 	}
 	else {
-		cursor_pos.col = begin_i + x;
+		cursor_pos.char_i = begin_i + x;
 	}
 
 	cursor_pos.line = new_line_i;
+
+	if (move == CODE_UP)
+		scroll_up(new_line->vline_begin + new_vline_offs);
+	else 
+		scroll_down(new_line->vline_begin + new_vline_offs);
 }
 
 /**
@@ -478,7 +508,7 @@ static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
 	if (line->count_softbreaks == 0) {
 		// line is contained in one vline
 		if (x != NULL)
-			*x = line_col.col;
+			*x = line_col.char_i;
 		return line->vline_begin;
 	}
 
@@ -487,17 +517,18 @@ static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
 	size_t* vline_starts = get_vline_starts(line, NULL);
 
 	// check if the the cursor is in first vline of the line
-	if (line_col.col < vline_starts[0]) {
+	if (line_col.char_i < vline_starts[0]) {
 		if (x != NULL)
-			*x = line_col.col;
+			*x = line_col.char_i;
 		return line->vline_begin;
 	}
 
 	size_t vline_index = dyn_arr_size_raw_bsearch(vline_starts, 
-			line->count_softbreaks, line_col.col);
+			line->count_softbreaks, line_col.char_i);
 
 	if (x != NULL)
-		*x = line_col.col - vline_starts[vline_index];
+		*x = line_col.char_i - vline_starts[vline_index];
+
 	return vline_index + 1 + line->vline_begin;
 }
 
@@ -555,8 +586,12 @@ static void add_softbreak_to_index(line_t* current_line, size_t i) {
 		dyn_arr_size_t* d_arr = &current_line->vline_index.d_arr;
 		if (current_line->count_softbreaks == VLINE_INDEX_STATIC_ARR_SIZE) {
 			// move s_arr to d_arr
+			size_t* s_arr = current_line->vline_index.s_arr;
+			size_t intermediate[VLINE_INDEX_STATIC_ARR_SIZE];
+			memcpy(intermediate, s_arr, 
+					VLINE_INDEX_STATIC_ARR_SIZE * sizeof(size_t));
 			dyn_arr_size_create(VLINE_INDEX_STATIC_ARR_SIZE + 1, 2, 1, d_arr);
-			dyn_arr_size_add_all(d_arr, current_line->vline_index.s_arr, 
+			dyn_arr_size_add_all(d_arr, intermediate, 
 					VLINE_INDEX_STATIC_ARR_SIZE);
 		}
 
@@ -603,36 +638,61 @@ static void initialize_lines(const char* str) {
 	}
 }
 
-static void print_line(size_t line_i) {
+/**
+ * prints line with index line_i. Return true iff the line was still completely
+ * on screen
+ */
+static char print_line(size_t line_i) {
 	line_t* line = &lines.arr[line_i];
-	size_t vvline_end;	// exclusive, end of the visible vlines of this line
+	// exclusive, end of the visible vlines of this line
+	size_t vvlines_local_end;	
 	if (line_i == lines.count - 1) { // line_i is the last line 
 		line_t* last_line = DYN_ARR_LAST(&lines);
-		vvline_end = last_line->vline_begin + last_line->count_softbreaks + 1;
+		vvlines_local_end = last_line->vline_begin + last_line->count_softbreaks + 1;
 	}
 	else
-		vvline_end = lines.arr[line_i + 1].vline_begin;
+		vvlines_local_end = lines.arr[line_i + 1].vline_begin;
 
-	if (vvline_end > vvlines_begin + EDITOR_LINES) 
+	if (vvlines_local_end > vvlines_begin + EDITOR_LINES) 
 		// line ends outside of visible area
-		vvline_end = vvlines_begin + EDITOR_LINES;
+		vvlines_local_end = vvlines_begin + EDITOR_LINES;
 
-	size_t char_i = 0; // index in the string
-	unsigned char col = 0;
-	size_t vline = vvlines_begin; // first visible vline of this line
+	unsigned char x = 0;
+	size_t vline = vvlines_begin; // first vvline of this line
 	if (vline < line->vline_begin)
 		vline = line->vline_begin;
 
-	while (char_i < line->string.count && vline < vvline_end) {
-		if (col >= EDITOR_COLUMNS) { // next vline
-			col = 0;
+
+	// find starting index
+	size_t char_i = 0; // index in the string
+	if (vline != line->vline_begin) {
+		// start in the middle of a line
+		size_t* vline_starts = get_vline_starts(line, NULL);
+		char_i = vline_starts[vline - line->vline_begin - 1];
+	}
+
+
+	while (char_i < line->string.count && vline < vvlines_local_end) {
+		if (x >= EDITOR_COLUMNS) { // next vline
+			x = 0;
 			++vline;
 			continue;
 		}
-		print_char_xy(col, vline - vvlines_begin, line->string.arr[char_i], 0);
+		print_char_xy(x, vline - vvlines_begin, line->string.arr[char_i], 0);
 		++char_i;
-		++col;
+		++x;
 	}
+
+	if (vline >= vvlines_local_end)
+		// line out of screen space
+		return 0;
+
+	while (x < EDITOR_COLUMNS) {
+		print_char_xy(x, vline - vvlines_begin, ' ', 0);
+		++x;
+	}
+
+	return 1;
 }
 
 static void print_chars(unsigned char x, unsigned char y, const char* str) {
@@ -661,9 +721,26 @@ static void print_chars(unsigned char x, unsigned char y, const char* str) {
 	}
 }
 
+/**
+ * vline_void is a pointer to a (size_t) vline.
+ * returns sign(vline - other->vline_begin);
+ */
+static int compare_lines_vline_begin(const void* vline_void, 
+		const line_t* other) {
+	size_t vline = *(size_t*) vline_void;
+	if (vline < other->vline_begin)
+		return -1;
+	else if (vline > other->vline_begin)
+		return 1;
+	return 0;
+}
+
 static void print_lines() {
-	for (size_t i = 0; i < lines.count; ++i)
-		print_line(i);
+	size_t first_line = dyn_arr_line_bsearch_cb(&lines, (void*) &vvlines_begin, 
+			&compare_lines_vline_begin);
+	for (size_t i = first_line; i < lines.count; ++i)
+		if (!print_line(i))
+			break;
 }
 
 

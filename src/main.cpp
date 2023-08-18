@@ -40,7 +40,8 @@ static const char* str = "\
 int main(void) {\n\
     printf(\"Hello World mmm\"); return 0;\n\
 }\n\
-0\n\
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n\
 1\n\
 2\n\
 3\n\

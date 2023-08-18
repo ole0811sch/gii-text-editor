@@ -21,12 +21,13 @@ extern "C" {
 #define CODE_LEFT -5
 #define CODE_RIGHT -6
 
-typedef struct {
+struct line_col {
 	// index of line (in lines)
 	size_t line;
 	// index of the char in the line's string
 	size_t char_i;
-} line_col_t;
+};
+typedef struct line_col line_col_t;
 
 
 #define VLINE_INDEX_STATIC_ARR_SIZE 4
@@ -85,6 +86,7 @@ static void move_cursor(int mode);
 static int maybe_scroll_down(size_t cursor_vline);
 static int maybe_scroll_up(size_t vline);
 static void update_changes_from(line_col_t begin);
+static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs);
 
 
 // static variables
@@ -93,6 +95,16 @@ static void update_changes_from(line_col_t begin);
 static char capitalization_on = 0;
 static char capitalization_on_locked = 0;
 static line_col_t cursor_pos = { 0, 0 };
+/** 
+ * vertical moves will try to get as close possible to cursor_x_target with the
+ * cursor's x value if cursor_x_target is greater than the previous x value.
+ * Setting the target to 0 means that the current x value is the
+ * target.
+ * Successful horizontal moves (including inserts and deletes) set 
+ * cursor_x_target to 0. If a vertical 
+ * move can't needs to reduce x (due to the line length), it updates
+ * cursor_x_target to the old x value.
+ */
 static unsigned char cursor_x_target = 0;
 
 
@@ -116,7 +128,38 @@ static dyn_arr_line_t lines;
 static size_t vvlines_begin = 0;
 
 static void insert_line_break(void) {
-	// TODO
+	line_t* line = &lines.arr[cursor_pos.line];
+
+	// insert new line
+	line_t uninitialized;
+	dyn_arr_line_insert(&lines, uninitialized, cursor_pos.line + 1);
+	line_t* new_line = &lines.arr[cursor_pos.line + 1];
+	new_line->count_softbreaks = 0;
+	dyn_arr_char_create(0, 2, 1, &new_line->string);
+	// calculate vline_index
+	recalculate_vline_index(new_line, 0);
+	
+	size_t transfer_count = line->string.count - cursor_pos.char_i;
+	// copy chars from old line
+	dyn_arr_char_add_all(&new_line->string, 
+			&line->string.arr[cursor_pos.char_i], transfer_count);
+
+	// remove chars from old line
+	dyn_arr_char_pop_some(&line->string, transfer_count);
+
+	line_col_t changes_begin = { cursor_pos.line, cursor_pos.char_i };
+	// this is necessary because the x value can be 0 and after a softbreak. 
+	// update_changes_from would
+	// then only start in the vline after that, even though we also need to
+	// remove the vline of the cursor position
+	if (changes_begin.char_i > 0)
+		--changes_begin.char_i;
+	move_cursor(0);
+	++cursor_pos.line;
+	cursor_pos.char_i = 0;
+	update_changes_from(changes_begin);
+
+	cursor_x_target = 0;
 }
 
 static void backspace(void) {
@@ -125,44 +168,63 @@ static void backspace(void) {
 	line_t* line = &lines.arr[cursor_pos.line];
 
 	if (cursor_pos.char_i == 0) {
+		if (cursor_pos.line == 0) {
+			// nothing to do
+			move_cursor(1);
+			return;
+		}
 		// concat with previous line
-		// TODO
+		line_t* previous = &lines.arr[cursor_pos.line - 1];
+		line_col_t begin_change = { cursor_pos.line - 1, 
+			previous->string.count };
+		if (dyn_arr_char_add_all(&previous->string, 
+					line->string.arr, line->string.count) == -1)
+			display_error("Out of memory");
+		dyn_arr_char_destroy(&line->string);
+		if (dyn_arr_line_remove(&lines, cursor_pos.line) == -1)
+			display_error("Out of memory");
+		cursor_pos = begin_change;
+		update_changes_from(begin_change);
 	}
 	else {
 		if (dyn_arr_char_remove(&line->string, cursor_pos.char_i - 1) == -1)
-			display_error("Out of memeory");
+			display_error("Out of memory");
 		--cursor_pos.char_i;
 
-		line_col_t begin;
-		begin.line = cursor_pos.line;
-		begin.char_i = cursor_pos.char_i;
-		update_changes_from(begin);
+		line_col_t begin_change = { cursor_pos.line, cursor_pos.char_i };
+		update_changes_from(begin_change);
 	}
+	cursor_x_target = 0;
 }
 
-static void remove_last_n_softbreaks(line_t* line, size_t n) {
-	size_t count_to_remove = line->count_softbreaks - n;
-	for (size_t i = 0; i < count_to_remove; ++i) {
-		if (line->count_softbreaks > VLINE_INDEX_STATIC_ARR_SIZE) {
-			dyn_arr_size_pop(&line->vline_index.d_arr);
-			--line->count_softbreaks;
+/**
+ * removes the softbreaks from the line's vline_index until only target_count
+ * remain
+ */
+static void remove_last_n_softbreaks(line_t* line, size_t target_count) {
+	size_t count_to_remove = line->count_softbreaks - target_count;
+	if (line->count_softbreaks > VLINE_INDEX_STATIC_ARR_SIZE) {
+		// we're currently using d_arr
+		if (target_count <= VLINE_INDEX_STATIC_ARR_SIZE) {
+			// move first target_count elements of d_arr to s_arr
+			size_t* heap_arr = line->vline_index.s_arr;
+			memmove(line->vline_index.s_arr, 
+					line->vline_index.d_arr.arr, 
+					target_count * sizeof(size_t));
+			// free(heap_arr);
 		}
-		else {
-			if (line->count_softbreaks == VLINE_INDEX_STATIC_ARR_SIZE) {
-				// move d_arr to s_arr
-				memmove(line->vline_index.s_arr, 
-						line->vline_index.d_arr.arr, 
-						VLINE_INDEX_STATIC_ARR_SIZE * sizeof(size_t));
-			}
-			line->count_softbreaks = n;
-			break;
-		}
+		else
+			// keep using d_arr
+			dyn_arr_size_pop_some(&line->vline_index.d_arr, count_to_remove);
 	}
+	line->count_softbreaks = target_count;
 }
 
 /**
  * recalculates the vline_index of line, starting with the starting index of
- * the vline after vline_offs. 
+ * the vline after vline_offs. If the line's count_softbreaks is 0 and
+ * vline_offs is 0, this functions just adds all indices to vline_index and 
+ * correctly sets count_softbreaks.
  *
  * returns the difference in how many vlines there were before and after. If new
  * vlines were added, that number is positive.
@@ -219,32 +281,44 @@ static void insert_char(char c) {
 	line_col_t begin;
 	begin.line = cursor_pos.line;
 	begin.char_i = cursor_pos.char_i - 1;
+	cursor_x_target = 0;
 	update_changes_from(begin);
 }
 
 /**
  * updates vline_indices, cursor and screen according to a change that starts at
- * begin
+ * begin. begin is used to determine the last vline whose index in vline_index
+ * is still correct. The cursor should be at the correct position already, 
+ * to determine if scrolling is necessary. 
+ * The vlines of the subsequent lines are set so one directly follows its 
+ * predecessor's last vline. 
  */
 static void update_changes_from(line_col_t begin) {
+	// find vline of begin
 	size_t vline = line_col_to_vline(begin, NULL);
 	line_t* line = &lines.arr[begin.line];
 
-	ptrdiff_t count_vlines_diff = 
-		recalculate_vline_index(line, vline - line->vline_begin);
-	if (count_vlines_diff != 0) {
-		for (size_t line_i = begin.line + 1;
-				line_i < lines.count; 
-				++line_i) {
-			apply_offset_to_vline_index(&lines.arr[line_i], count_vlines_diff);
-		}
+	// recalculate vline_index of line, starting from vline's successor
+	recalculate_vline_index(line, vline - line->vline_begin);
+	// shift all subsequent vline_indices if necessary
+	char shifted = 0;
+	for (size_t line_i = begin.line + 1;
+			line_i < lines.count; 
+			++line_i) {
+		line_t* last_line = &lines.arr[line_i - 1];
+		size_t new_vline_begin = last_line->vline_begin 
+			+ last_line->count_softbreaks + 1;
+		line_t* shift_line = &lines.arr[line_i];
+		ptrdiff_t offset = new_vline_begin - shift_line->vline_begin;
+		shifted |= offset != 0;
+		apply_offset_to_vline_index(shift_line,
+				offset);
 	}
 
-
+	// scroll if necessary
 	size_t new_vline = line_col_to_vline(cursor_pos, NULL);
 	line_t* last_line = DYN_ARR_LAST(&lines);
 	size_t last_vline = last_line->count_softbreaks + last_line->vline_begin;
-
 	char scrolled = 1;
 	if (!maybe_scroll_down(new_vline)) {
 		if (last_vline >= EDITOR_LINES - 1) { 
@@ -264,7 +338,7 @@ static void update_changes_from(line_col_t begin) {
 	if (!scrolled) {
 		// did not scroll, need to print manually
 		print_partial_line(begin);
-		if (count_vlines_diff != 0) {
+		if (shifted) {
 			for (size_t line_i = begin.line + 1;
 					line_i < lines.count; 
 					++line_i) {
@@ -282,7 +356,6 @@ static void update_changes_from(line_col_t begin) {
 static void handle_char(char c) {
 	switch(c) {
 		case '\n': 
-			display_error("Not implemented");
 			insert_line_break();
 			break;
 		case '\x08':
@@ -366,14 +439,16 @@ static void handle_cursor_move(int move) {
 		case CODE_LEFT:
 			if (cursor_pos.char_i > 0) {
 				--cursor_pos.char_i;
-				size_t vline = line_col_to_vline(cursor_pos, &cursor_x_target);
+				size_t vline = line_col_to_vline(cursor_pos, NULL);
+				cursor_x_target = 0;
 				maybe_scroll_up(vline);
 			}
 			break;
 		case CODE_RIGHT:
 			if (cursor_pos.char_i < lines.arr[cursor_pos.line].string.count) {
 				++cursor_pos.char_i;
-				size_t vline = line_col_to_vline(cursor_pos, &cursor_x_target);
+				size_t vline = line_col_to_vline(cursor_pos, NULL);
+				cursor_x_target = 0;
 				maybe_scroll_down(vline);
 			}
 			break;
@@ -435,6 +510,7 @@ static void	handle_cursor_move_vertical(int move) {
 		}
 	}
 
+	// tentatively set x to max(x, cursor_x_target)
 	if (cursor_x_target > x)
 		x = cursor_x_target;
 
@@ -451,9 +527,10 @@ static void	handle_cursor_move_vertical(int move) {
 		begin_i = vline_starts_new[new_vline_offs - 1];
 	// number of chars in vline
 	size_t vline_length = new_line->string.count - begin_i;
-	if (x >= vline_length) { // there is no char at x pos in the vline
+	if (x >= vline_length) { // there is no char at x pos in the vline,
 		// cursor_pos.char_i is after last char in line
 		cursor_pos.char_i = new_line->string.count;
+		cursor_x_target = x;
 	}
 	else {
 		cursor_pos.char_i = begin_i + x;
@@ -606,7 +683,9 @@ static int key_code_to_ascii(unsigned int code) {
 
 /**
  * if x isn't null, it is set to the char_point_t x value that line_col
- * corresponds to.
+ * corresponds to. If char_i is greater than the index of the last char of the
+ * line, the last vline of the line is returned, x will be greater than
+ * EDITOR_COLUMNS.
  */
 static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
 	line_t* line = &lines.arr[line_col.line];
@@ -749,9 +828,7 @@ static void initialize_lines(const char* str) {
 }
 
 static int print_line(size_t line_i) {
-	line_col_t line_col;
-	line_col.line = line_i;
-	line_col.char_i = 0;
+	line_col_t line_col = { line_i, 0 };
 	return print_partial_line(line_col);
 }
 
@@ -796,7 +873,7 @@ static int print_partial_line(line_col_t line_col) {
 		char_i = line_col.char_i;
 
 
-
+	
 	while (char_i < line->string.count && vline < vvlines_local_end) {
 		if (x >= EDITOR_COLUMNS) { // next vline
 			x = 0;

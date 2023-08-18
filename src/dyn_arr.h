@@ -19,6 +19,7 @@
 #define _DYN_ARR_SHRINK _DYN_ARR_F1SP(shrink)
 #define _DYN_ARR_CHANGE_SIZE _DYN_ARR_F1SP(change_size)
 #define DYN_ARR_REMOVE _DYN_ARR_F1S(remove)
+#define DYN_ARR_POP_SOME _DYN_ARR_F1S(pop_some)
 #define DYN_ARR_POP _DYN_ARR_F1S(pop)
 #define _DYN_ARR_MAYBE_SHRINK _DYN_ARR_F1SP(check_shrink)
 #define DYN_ARR_DESTROY _DYN_ARR_F1S(destroy)
@@ -29,9 +30,23 @@
 #define DYN_ARR_ADD_ALL _DYN_ARR_F1S(add_all)
 
 
+
 #ifndef DYN_ARR_CG_STATIC
 #define DYN_ARR_CG_STATIC
 #endif // DYN_ARR_CG_STATIC
+
+/**
+ * the next smaller capacity nc is taken if nc *
+ * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR / 
+ * DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR is still greater than the number of
+ * elements in the array.
+ */
+#ifndef DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
+#define DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 3
+#endif // DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
+#ifndef DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
+#define DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 4
+#endif // DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
 
 #define PFX DYN_ARR_CG_STATIC
 
@@ -101,6 +116,14 @@ PFX int DYN_ARR_REMOVE(DYN_ARR_T* dyn_arr, size_t index);
  * reallocate the array. In this case the operation had no effect.
  */
 PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr);
+
+/**
+ * name: dyn_arr_$type_pop_some
+ * returns 0 on success, -1 if it tried to shrink the array and could not 
+ * reallocate the array. In this case the operation had no effect. The functions
+ * is equivalent to calling dyn_arr_$type_pop n times.
+ */
+PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n);
 
 /**
  * name: dyn_arr_$type_destroy
@@ -274,7 +297,8 @@ PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* arr, size_t n) {
 PFX int _DYN_ARR_MAYBE_SHRINK(DYN_ARR_T* dyn_arr) {
 	size_t next_capacity = dyn_arr->capacity 
 		* dyn_arr->growth_factor_denominator / dyn_arr->growth_factor_numerator;
-	if (next_capacity * 3 / 4 > dyn_arr->count 
+	if (next_capacity * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
+			/ DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR > dyn_arr->count 
 			&& _DYN_ARR_SHRINK(dyn_arr) == -1)
 		return -1;
 
@@ -295,6 +319,28 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr) {
 	--dyn_arr->count;
 
 	return _DYN_ARR_MAYBE_SHRINK(dyn_arr);
+}
+
+#include "util.h"
+#include <stdio.h>
+
+PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n) {
+	if (n > dyn_arr->count)
+		n = dyn_arr->count;
+	dyn_arr->count -= n;
+
+	// find smallest capacity that's over the threshold
+	size_t next_capacity = dyn_arr->capacity;
+	size_t capacity;
+	do {
+		capacity = next_capacity;
+		next_capacity = capacity * dyn_arr->growth_factor_denominator 
+			/ dyn_arr->growth_factor_numerator;
+	} while (next_capacity * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
+						/ DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
+						> dyn_arr->count);
+
+	return _DYN_ARR_CHANGE_SIZE(dyn_arr, capacity);
 }
 
 #ifdef DYN_ARR_CG_SIMPLE_COMPARISON
@@ -369,6 +415,7 @@ PFX void DYN_ARR_DESTROY(DYN_ARR_T* dyn_arr) {
 #undef _DYN_ARR_SHRINK
 #undef DYN_ARR_REMOVE
 #undef DYN_ARR_POP
+#undef DYN_ARR_POP_SOME
 #undef _DYN_ARR_MAYBE_SHRINK
 #undef DYN_ARR_DESTROY
 #undef DYN_ARR_BSEARCH

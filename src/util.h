@@ -55,7 +55,7 @@ typedef struct {
 
 // coordinates of a character in the character grid
 typedef point_t char_point_t;
-void display_error(const char* msg, int n);
+void display_error(const char* msg);
 
 extern char dbg_buf[256];
 

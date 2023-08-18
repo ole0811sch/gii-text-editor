@@ -83,6 +83,8 @@ static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks);
 static size_t* add_softbreak_to_index(line_t* current_line, size_t i);
 static void move_cursor(int mode);
 static int maybe_scroll_down(size_t cursor_vline);
+static int maybe_scroll_up(size_t vline);
+static void update_changes_from(line_col_t begin);
 
 
 // static variables
@@ -113,51 +115,61 @@ static dyn_arr_line_t lines;
  */
 static size_t vvlines_begin = 0;
 
-static void insert_line_break() {
+static void insert_line_break(void) {
 	// TODO
 }
 
-static void backspace() {
-	/*
-	if (cursor_pos.x == 0)
-		; // TODO
-	else {
-		// dyn_arr of the chars starting with the one after the one to delete
-		// and ending with the next line break (or not if it is eof)
-		dyn_arr_char_t rest;
-		dyn_arr_char_create(10, 3, 2, &rest);
-		size_t x = cursor_pos.x;
-		for (size_t y = cursor_pos.y; y < EDITOR_LINES; ++y) {
-			for (; x < EDITOR_COLUMNS; ++x) {
-				char c = lines[y][x];
-				dyn_arr_char_add(&rest, c);
-				if (c == '\n') {
-					dyn_arr_char_add(&rest, '\0');
-					goto break_outer_loop;
-				}
-				else if (c == '\0') {
-					goto break_outer_loop;
-				}
-			}
-			x = 0;
-		}
-break_outer_loop:
-		for (int y = 0; y < 2; ++y)
-			for (int x = 0; x < EDITOR_COLUMNS; ++x)
-				print_char(x, EDITOR_LINES - 2 + y, ' ', 0);
-		print_chars(0, EDITOR_LINES - 2, rest.arr);
+static void backspace(void) {
+	move_cursor(0);
+
+	line_t* line = &lines.arr[cursor_pos.line];
+
+	if (cursor_pos.char_i == 0) {
+		// concat with previous line
+		// TODO
 	}
-	*/
+	else {
+		if (dyn_arr_char_remove(&line->string, cursor_pos.char_i - 1) == -1)
+			display_error("Out of memeory");
+		--cursor_pos.char_i;
+
+		line_col_t begin;
+		begin.line = cursor_pos.line;
+		begin.char_i = cursor_pos.char_i;
+		update_changes_from(begin);
+	}
+}
+
+static void remove_last_n_softbreaks(line_t* line, size_t n) {
+	size_t count_to_remove = line->count_softbreaks - n;
+	for (size_t i = 0; i < count_to_remove; ++i) {
+		if (line->count_softbreaks > VLINE_INDEX_STATIC_ARR_SIZE) {
+			dyn_arr_size_pop(&line->vline_index.d_arr);
+			--line->count_softbreaks;
+		}
+		else {
+			if (line->count_softbreaks == VLINE_INDEX_STATIC_ARR_SIZE) {
+				// move d_arr to s_arr
+				memmove(line->vline_index.s_arr, 
+						line->vline_index.d_arr.arr, 
+						VLINE_INDEX_STATIC_ARR_SIZE * sizeof(size_t));
+			}
+			line->count_softbreaks = n;
+			break;
+		}
+	}
 }
 
 /**
  * recalculates the vline_index of line, starting with the starting index of
  * the vline after vline_offs. 
  *
- * returns how many new vlines this line now occupies
+ * returns the difference in how many vlines there were before and after. If new
+ * vlines were added, that number is positive.
  */
-static size_t recalculate_vline_index(line_t* line, size_t vline_offs) {
-	size_t* vline_starts = get_vline_starts(line, NULL);
+static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs) {
+	size_t count_softbreaks_start;
+	size_t* vline_starts = get_vline_starts(line, &count_softbreaks_start);
 	size_t  char_i; 
 	if (vline_offs == 0)
 		char_i = 0;
@@ -168,18 +180,18 @@ static size_t recalculate_vline_index(line_t* line, size_t vline_offs) {
 	// recalculate existing starts
 	for (size_t sb_i = vline_offs; sb_i < line->count_softbreaks; ++sb_i) {
 		char_i += EDITOR_COLUMNS;
+		if (char_i >= line->string.count) {
+			remove_last_n_softbreaks(line, sb_i);
+			break;
+		}
 		vline_starts[sb_i] = char_i;
 	}
 
-
 	// add softbreaks until char_i is out of range of the line's string
-	size_t count_new_lines = 0;
-	while ((char_i += EDITOR_COLUMNS) < line->string.count) {
+	while ((char_i += EDITOR_COLUMNS) < line->string.count)
 		add_softbreak_to_index(line, char_i);
-		++count_new_lines;
-	}
 	
-	return count_new_lines;
+	return line->count_softbreaks - count_softbreaks_start;
 }
 
 /**
@@ -199,31 +211,61 @@ static void apply_offset_to_vline_index(line_t* line, ptrdiff_t offs) {
 static void insert_char(char c) {
 	move_cursor(0);
 
-	size_t vline = line_col_to_vline(cursor_pos, NULL);
 	line_t* line = &lines.arr[cursor_pos.line];
-	dyn_arr_char_insert(&line->string, c, cursor_pos.char_i);
+	if (dyn_arr_char_insert(&line->string, c, cursor_pos.char_i) == -1)
+		display_error("Out of memory");
 	++cursor_pos.char_i;
 
-	size_t count_new_lines = 
+	line_col_t begin;
+	begin.line = cursor_pos.line;
+	begin.char_i = cursor_pos.char_i - 1;
+	update_changes_from(begin);
+}
+
+/**
+ * updates vline_indices, cursor and screen according to a change that starts at
+ * begin
+ */
+static void update_changes_from(line_col_t begin) {
+	size_t vline = line_col_to_vline(begin, NULL);
+	line_t* line = &lines.arr[begin.line];
+
+	ptrdiff_t count_vlines_diff = 
 		recalculate_vline_index(line, vline - line->vline_begin);
-	if (count_new_lines > 0) {
-		for (size_t line_i = cursor_pos.line + 1;
+	if (count_vlines_diff != 0) {
+		for (size_t line_i = begin.line + 1;
 				line_i < lines.count; 
 				++line_i) {
-			apply_offset_to_vline_index(&lines.arr[line_i], count_new_lines);
+			apply_offset_to_vline_index(&lines.arr[line_i], count_vlines_diff);
 		}
 	}
 
 
-	// if x == EDITOR_COLUMNS, it was after the last 
-	if (!maybe_scroll_down(line_col_to_vline(cursor_pos, NULL))) {
+	size_t new_vline = line_col_to_vline(cursor_pos, NULL);
+	line_t* last_line = DYN_ARR_LAST(&lines);
+	size_t last_vline = last_line->count_softbreaks + last_line->vline_begin;
+
+	char scrolled = 1;
+	if (!maybe_scroll_down(new_vline)) {
+		if (last_vline >= EDITOR_LINES - 1) { 
+			// without this the last lines could be blank when deleting
+			if (!maybe_scroll_up(last_vline - (EDITOR_LINES - 1))) {
+				if (!maybe_scroll_up(new_vline)) {
+					scrolled = 0;
+				}
+			}
+		}
+		else {
+			if (!maybe_scroll_up(new_vline)) {
+				scrolled = 0;
+			}
+		}
+	}
+	if (!scrolled) {
 		// did not scroll, need to print manually
-		line_col_t print_begin;
-		print_begin.line = cursor_pos.line;
-		print_begin.char_i = cursor_pos.char_i - 1;
-		print_partial_line(print_begin);
-		if (count_new_lines > 0) {
-			for (size_t line_i = cursor_pos.line + 1;
+		print_partial_line(begin);
+		if (count_vlines_diff != 0) {
+			for (size_t line_i = begin.line + 1;
 					line_i < lines.count; 
 					++line_i) {
 				if (!print_line(line_i))
@@ -240,11 +282,10 @@ static void insert_char(char c) {
 static void handle_char(char c) {
 	switch(c) {
 		case '\n': 
-			display_error("Not implemented", 1);
+			display_error("Not implemented");
 			insert_line_break();
 			break;
 		case '\x08':
-			display_error("Not implemented", 1);
 			backspace();
 			break;
 		default:
@@ -253,39 +294,6 @@ static void handle_char(char c) {
 	}
 }
 
-/**
- * if horizontal_move and the cursor_x_target is greater than its current x, 
- * it tries to move it there. If the cursor comes behind '\0' or '\n', i.e., 
- * non-text, it moves it to the first '\0' or '\n' ,i.e., non-text, of the line.
- * If not horizontal_move, then the target will be overwritten.
- */
-static void correct_char_pos(char horizontal_move) {
-	/*
-	const char* line = lines[cursor_pos.y];
-	char tmp;
-	if (cursor_pos.x == 0 || (tmp = line[cursor_pos.x - 1],
-				tmp != '\0' && tmp  != '\n')) { 
-		// cursor is right behind text
-		if (!horizontal_move && cursor_x_target > cursor_pos.x) { 
-			// cursor needs to be moved 
-			cursor_pos.x = cursor_x_target;
-			correct_char_pos(horizontal_move);
-		}
-		else { // cursor is in correct position;
-			cursor_x_target = cursor_pos.x;
-		}
-	}
-	else { // cursor isn't on text, move it to the left
-		cursor_pos.x = 0;
-		while ((tmp = line[cursor_pos.x], 
-					tmp != '\0' && tmp != '\n'))
-			++cursor_pos.x;
-
-		if (horizontal_move)
-			cursor_x_target = cursor_pos.x;
-	}
-	*/
-}
 
 /**
  * mode = 1: print, mode = 0: erase
@@ -322,14 +330,14 @@ void initialize_editor(const char* content) {
 }
 
 /**
- * if cursor_vline is before the first vvline, it adjusts vvlines so that 
- * cursor_vline is the first vvline
+ * if vline is before the first vvline, it adjusts vvlines so that 
+ * vline is the first vvline
  *
  * returns whether it scrolled
  */
-static int maybe_scroll_up(size_t cursor_vline) {
-	if (cursor_vline < vvlines_begin) {
-		vvlines_begin = cursor_vline;
+static int maybe_scroll_up(size_t vline) {
+	if (vline < vvlines_begin) {
+		vvlines_begin = vline;
 		print_lines();
 		return 1;
 	}
@@ -337,14 +345,14 @@ static int maybe_scroll_up(size_t cursor_vline) {
 }
 
 /**
- * if cursor_vline is after the last vvline, it adjusts vvlines so that 
- * cursor_vline is the last vvline
+ * if vline is after the last vvline, it adjusts vvlines so that 
+ * vline is the last vvline
  *
  * returns whether it scrolled
  */
-static int maybe_scroll_down(size_t cursor_vline) {
-	if (cursor_vline >= vvlines_begin + EDITOR_LINES) {
-		vvlines_begin = cursor_vline - EDITOR_LINES + 1;
+static int maybe_scroll_down(size_t vline) {
+	if (vline >= vvlines_begin + EDITOR_LINES) {
+		vvlines_begin = vline - EDITOR_LINES + 1;
 		print_lines();
 		return 1;
 	}
@@ -668,7 +676,7 @@ static void add_new_line(size_t vline_begin) {
 	dyn_arr_line_add(&lines, new_line);
 	dyn_arr_char_t* string = &DYN_ARR_LAST(&lines)->string;
 	if (dyn_arr_char_create(1, 2, 1, string) == -1)
-		display_error("Out of memory", 1);
+		display_error("Out of memory");
 }
 
 /**
@@ -707,7 +715,7 @@ static size_t* add_softbreak_to_index(line_t* current_line, size_t i) {
  */
 static void initialize_lines(const char* str) {
 	if(dyn_arr_line_create(10, 2, 1, &lines) == -1)
-		display_error("Out of memory", 1);
+		display_error("Out of memory");
 
 	if (*str == '\0')
 		return;

@@ -5,7 +5,7 @@
 char dbg_buf[256];
 
 
-void display_error(const char* msg, int n) {
+void display_error(const char* msg) {
 	PopUpWin(6);
 	locate(2, 2);
 	unsigned char char_str[2];

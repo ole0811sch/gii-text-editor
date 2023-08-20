@@ -36,6 +36,8 @@ extern "C" {
 
 jmp_buf error_jmp;
 static const char* str = "\
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n\
 #include <stdio.h>\n\
 int main(void) {\n\
     printf(\"Hello World mmm\"); return 0;\n\
@@ -55,7 +57,15 @@ eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n\
 \n\
 Maecenas pellentesque magna in condimentum laoreet. Ut venenatis justo non libero porttitor rhoncus non ut arcu. Aliquam venenatis sed mi id iaculis. Suspendisse vel ligula laoreet, iaculis libero vel, egestas nunc. Fusce eget viverra dolor. Quisque sodales molestie elit, ut condimentum dui consequat in. Pellentesque in sodales ex. Nullam consectetur iaculis lectus. Nam vitae molestie justo. Ut dignissim lorem justo, ac ullamcorper nisi vehicula at. Cras non sollicitudin felis. ";
 
+#ifdef MOCKUP
+int main(void);
+int AddIn_main(int isAppli, unsigned short OptionNum) {
+	return 0;
+}
+int main(void)
+#else
 int AddIn_main(int isAppli, unsigned short OptionNum)
+#endif
 {
 	if (setjmp(error_jmp))
 		return 0;

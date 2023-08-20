@@ -53,6 +53,8 @@
 #ifndef DYN_ARR_H_
 #define DYN_ARR_H_
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -179,7 +181,10 @@ PFX size_t DYN_ARR_RAW_BSEARCH_CB(const DYN_ARR_CG_TYPE* arr, size_t n,
 
 #define DYN_ARR_TMP (defined DYN_ARR_CG_FREE) + (defined DYN_ARR_CG_REALLOC) \
 	+ (defined DYN_ARR_CG_MALLOC)
-#if DYN_ARR_TMP != 0 && DYN_ARR_TMP != 3
+#if (defined DYN_ARR_CG_FREE) + (defined DYN_ARR_CG_REALLOC) \
+	+ (defined DYN_ARR_CG_MALLOC) != 0 \
+	&& (defined DYN_ARR_CG_FREE) + (defined DYN_ARR_CG_REALLOC) \
+	+ (defined DYN_ARR_CG_MALLOC) != 3
 #error "If you define any of the allocation related macros you need to define" \
 	" all of them"
 #endif // allocator functions

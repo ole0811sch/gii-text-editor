@@ -14,6 +14,8 @@ extern "C" {
 #define BOTTOM 63
 #define RIGHT 127
 
+#define EVAL(x) x
+
 #define DEBUG
 
 #ifdef DEBUG

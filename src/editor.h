@@ -14,6 +14,12 @@ extern "C" {
 #include "util.h"
 #include "dyn_arrs.h"
 
+#define CODE_UP -3
+#define CODE_DOWN -4
+#define CODE_LEFT -5
+#define CODE_RIGHT -6
+
+
 void initialize_editor(const char* content);
 
 /* boundaries (inclusive) of the text box of the editor as pixel coordinates */

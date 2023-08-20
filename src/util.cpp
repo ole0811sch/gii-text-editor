@@ -1,4 +1,6 @@
 #include <setjmp.h>
+#include <stddef.h>
+#include <keybios.h>
 #include "main.h"
 #include "util.h"
 

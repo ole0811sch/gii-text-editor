@@ -16,11 +16,6 @@ extern "C" {
 #include "dyn_arrs.h"
 #include "util.h"
 
-#define CODE_UP -3
-#define CODE_DOWN -4
-#define CODE_LEFT -5
-#define CODE_RIGHT -6
-
 struct line_col {
 	// index of line (in lines)
 	size_t line;
@@ -128,13 +123,14 @@ static dyn_arr_line_t lines;
 static size_t vvlines_begin = 0;
 
 static void insert_line_break(void) {
-	line_t* line = &lines.arr[cursor_pos.line];
 
 	// insert new line
 	line_t uninitialized;
 	dyn_arr_line_insert(&lines, uninitialized, cursor_pos.line + 1);
+	line_t* line = &lines.arr[cursor_pos.line];
 	line_t* new_line = &lines.arr[cursor_pos.line + 1];
 	new_line->count_softbreaks = 0;
+	new_line->vline_begin = 0;
 	dyn_arr_char_create(0, 2, 1, &new_line->string);
 	// calculate vline_index
 	recalculate_vline_index(new_line, 0);
@@ -207,11 +203,11 @@ static void remove_last_n_softbreaks(line_t* line, size_t target_count) {
 		// we're currently using d_arr
 		if (target_count <= VLINE_INDEX_STATIC_ARR_SIZE) {
 			// move first target_count elements of d_arr to s_arr
-			size_t* heap_arr = line->vline_index.s_arr;
+			size_t* heap_arr = line->vline_index.d_arr.arr;
 			memmove(line->vline_index.s_arr, 
 					line->vline_index.d_arr.arr, 
 					target_count * sizeof(size_t));
-			// free(heap_arr);
+			free(heap_arr);
 		}
 		else
 			// keep using d_arr
@@ -261,7 +257,7 @@ static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs) {
  */
 static void apply_offset_to_vline_index(line_t* line, ptrdiff_t offs) {
 	size_t* vline_starts = get_vline_starts(line, NULL);
-	for (size_t sb_i; sb_i < line->count_softbreaks; ++sb_i) {
+	for (size_t sb_i = 0; sb_i < line->count_softbreaks; ++sb_i) {
 		vline_starts[sb_i] += offs;
 	}
 	line->vline_begin += offs;
@@ -399,6 +395,21 @@ void initialize_editor(const char* content) {
 			handle_char((char) c);
 		else if (c <= CODE_UP && c >= CODE_RIGHT)
 			handle_cursor_move(c);
+		for (size_t i = 0; i < lines.count; ++i) {
+			char intermediate[256];
+			size_t line_bytes = lines.arr[i].string.count * sizeof(char);
+			if (line_bytes > 255)
+				line_bytes = 255;
+			memcpy(intermediate, lines.arr[i].string.arr, 
+					line_bytes);
+			intermediate[line_bytes] = '\0';
+			size_t bytes_written = 
+				snprintf(dbg_buf, 256, "%.3lu: %s", i, intermediate);
+			if (bytes_written > 255)
+				bytes_written = 255;
+			dbg_buf[bytes_written] = '\0';
+			dbg_printf(_);
+		}
 	}
 }
 
@@ -434,7 +445,6 @@ static int maybe_scroll_down(size_t vline) {
 
 static void handle_cursor_move(int move) {
 	move_cursor(0);
-	char is_horizontal = 1;
 	switch (move) {
 		case CODE_LEFT:
 			if (cursor_pos.char_i > 0) {
@@ -454,7 +464,6 @@ static void handle_cursor_move(int move) {
 			break;
 		default:
 			handle_cursor_move_vertical(move);
-			is_horizontal = 0;
 	}
 
 	// if (moved)
@@ -633,13 +642,12 @@ static int key_code_to_ascii(unsigned int code) {
 	X(RIGHT, CODE_RIGHT) \
 	X(EXE, '\n') \
 	X(DEL, '\x08')
-#define EASY_CASE(c, c_literal) case KEY_CHAR_##c: ch = c_literal; break;
 	signed char ch;
 	switch (code) {
-#define X(c, c_literal) EASY_CASE(c, c_literal);
+#define X(c, c_literal) case EVAL(EVAL(KEY_CHAR_##c)): ch = c_literal; break;
 		EASY_CASES
 #undef X
-#define X(c, c_literal) case KEY_CTRL_##c: ch = c_literal; break;
+#define X(c, c_literal) case EVAL(EVAL(KEY_CTRL_##c)): ch = c_literal; break;
 		EASY_CASES_CTRL
 #undef X
 #undef EASY_CASE
@@ -693,6 +701,7 @@ static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
 		// line is contained in one vline
 		if (x != NULL)
 			*x = line_col.char_i;
+
 		return line->vline_begin;
 	}
 
@@ -780,9 +789,9 @@ static size_t* add_softbreak_to_index(line_t* current_line, size_t i) {
 			dyn_arr_size_create(VLINE_INDEX_STATIC_ARR_SIZE + 1, 2, 1, d_arr);
 			dyn_arr_size_add_all(d_arr, intermediate, 
 					VLINE_INDEX_STATIC_ARR_SIZE);
-			ret_val = d_arr->arr;
 		}
 
+		ret_val = d_arr->arr;
 		dyn_arr_size_add(d_arr, i);
 	}
 	++current_line->count_softbreaks;
@@ -957,8 +966,8 @@ print_char_xy(unsigned char x, unsigned char y, char c, char negative) {
  */
 static void print_char(char_point_t point, char c, char negative) {
 	point_t px = char_point_to_point(point);
-	for (int y = 0; y < CHAR_HEIGHT; ++y) {
-		for (int x = 0; x < CHAR_WIDTH; ++x) {
+	for (unsigned int y = 0; y < CHAR_HEIGHT; ++y) {
+		for (unsigned int x = 0; x < CHAR_WIDTH; ++x) {
 			Bdisp_SetPoint_DDVRAM(px.x + x, px.y + y, 
 					font[(unsigned char) c][y][x] ^ negative);
 		}

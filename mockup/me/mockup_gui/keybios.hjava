@@ -1,0 +1,131 @@
+#include "../../keybios.h"
+
+#define KEY_CODES \
+X(KEY_CHAR_0,          0x30) \
+X(KEY_CHAR_1,          0x31) \
+X(KEY_CHAR_2,          0x32) \
+X(KEY_CHAR_3,          0x33) \
+X(KEY_CHAR_4,          0x34) \
+X(KEY_CHAR_5,          0x35) \
+X(KEY_CHAR_6,          0x36) \
+X(KEY_CHAR_7,          0x37) \
+X(KEY_CHAR_8,          0x38) \
+X(KEY_CHAR_9,          0x39) \
+X(KEY_CHAR_DP,         0x2e) \
+X(KEY_CHAR_EXP,        0x0f) \
+X(KEY_CHAR_PMINUS,     0x87) \
+X(KEY_CHAR_PLUS,       0x89) \
+X(KEY_CHAR_MINUS,      0x99) \
+X(KEY_CHAR_MULT,       0xa9) \
+X(KEY_CHAR_DIV,        0xb9) \
+X(KEY_CHAR_FRAC,       0xbb) \
+X(KEY_CHAR_LPAR,       0x28) \
+X(KEY_CHAR_RPAR,       0x29) \
+X(KEY_CHAR_COMMA,      0x2c) \
+X(KEY_CHAR_STORE,      0x0e) \
+X(KEY_CHAR_LOG,        0x95) \
+X(KEY_CHAR_LN,         0x85) \
+X(KEY_CHAR_SIN,        0x81) \
+X(KEY_CHAR_COS,        0x82) \
+X(KEY_CHAR_TAN,        0x83) \
+X(KEY_CHAR_SQUARE,     0x8b) \
+X(KEY_CHAR_POW,        0xa8) \
+X(KEY_CHAR_IMGNRY,     0x7f50) \
+X(KEY_CHAR_LIST,       0x7f51) \
+X(KEY_CHAR_MAT,        0x7f40) \
+X(KEY_CHAR_EQUAL,      0x3d) \
+X(KEY_CHAR_PI,         0xd0) \
+X(KEY_CHAR_ANS,        0xc0) \
+X(KEY_CHAR_LBRCKT,     0x5b) \
+X(KEY_CHAR_RBRCKT,     0x5d) \
+X(KEY_CHAR_LBRACE,     0x7b) \
+X(KEY_CHAR_RBRACE,     0x7d) \
+X(KEY_CHAR_CR,         0x0d) \
+X(KEY_CHAR_CUBEROOT,   0x96) \
+X(KEY_CHAR_RECIP,      0x9b) \
+X(KEY_CHAR_ANGLE,      0x7f54) \
+X(KEY_CHAR_EXPN10,     0xb5) \
+X(KEY_CHAR_EXPN,       0xa5) \
+X(KEY_CHAR_ASIN,       0x91) \
+X(KEY_CHAR_ACOS,       0x92) \
+X(KEY_CHAR_ATAN,       0x93) \
+X(KEY_CHAR_ROOT,       0x86) \
+X(KEY_CHAR_POWROOT,    0xb8) \
+X(KEY_CHAR_SPACE,      0x20) \
+X(KEY_CHAR_DQUATE,     0x22) \
+X(KEY_CHAR_VALR,       0xcd) \
+X(KEY_CHAR_THETA,      0xce) \
+X(KEY_CHAR_A,          0x41) \
+X(KEY_CHAR_B,          0x42) \
+X(KEY_CHAR_C,          0x43) \
+X(KEY_CHAR_D,          0x44) \
+X(KEY_CHAR_E,          0x45) \
+X(KEY_CHAR_F,          0x46) \
+X(KEY_CHAR_G,          0x47) \
+X(KEY_CHAR_H,          0x48) \
+X(KEY_CHAR_I,          0x49) \
+X(KEY_CHAR_J,          0x4a) \
+X(KEY_CHAR_K,          0x4b) \
+X(KEY_CHAR_L,          0x4c) \
+X(KEY_CHAR_M,          0x4d) \
+X(KEY_CHAR_N,          0x4e) \
+X(KEY_CHAR_O,          0x4f) \
+X(KEY_CHAR_P,          0x50) \
+X(KEY_CHAR_Q,          0x51) \
+X(KEY_CHAR_R,          0x52) \
+X(KEY_CHAR_S,          0x53) \
+X(KEY_CHAR_T,          0x54) \
+X(KEY_CHAR_U,          0x55) \
+X(KEY_CHAR_V,          0x56) \
+X(KEY_CHAR_W,          0x57) \
+X(KEY_CHAR_X,          0x58) \
+X(KEY_CHAR_Y,          0x59) \
+X(KEY_CHAR_Z,          0x5a) \
+X(KEY_CTRL_NOP,        0) \
+X(KEY_CTRL_EXE,        30004) \
+X(KEY_CTRL_DEL,        30025) \
+X(KEY_CTRL_AC,         30015) \
+X(KEY_CTRL_FD,         30046) \
+X(KEY_CTRL_XTT,        30001) \
+X(KEY_CTRL_EXIT,       30002) \
+X(KEY_CTRL_SHIFT,      30006) \
+X(KEY_CTRL_ALPHA,      30007) \
+X(KEY_CTRL_OPTN,       30008) \
+X(KEY_CTRL_VARS,       30016) \
+X(KEY_CTRL_UP,         30018) \
+X(KEY_CTRL_DOWN,       30023) \
+X(KEY_CTRL_LEFT,       30020) \
+X(KEY_CTRL_RIGHT,      30021) \
+X(KEY_CTRL_F1,         30009) \
+X(KEY_CTRL_F2,         30010) \
+X(KEY_CTRL_F3,         30011) \
+X(KEY_CTRL_F4,         30012) \
+X(KEY_CTRL_F5,         30013) \
+X(KEY_CTRL_F6,         30014) \
+X(KEY_CTRL_CATALOG,    30100) \
+X(KEY_CTRL_CAPTURE,    30055) \
+X(KEY_CTRL_CLIP,       30050) \
+X(KEY_CTRL_PASTE,      30036) \
+X(KEY_CTRL_INS,        30033) \
+X(KEY_CTRL_MIXEDFRAC,  30054) \
+X(KEY_CTRL_FRACCNVRT,  30026) \
+X(KEY_CTRL_QUIT,       30029) \
+X(KEY_CTRL_PRGM,       30028) \
+X(KEY_CTRL_SETUP,      30037) \
+X(KEY_CTRL_PAGEUP,     30052) \
+X(KEY_CTRL_PAGEDOWN,   30053) \
+X(KEY_CTRL_MENU,       30003) \
+X(KEY_CTRL_RESERVE1,	30060) \
+X(KEY_CTRL_RESERVE2,	30061) \
+X(KEY_CTRL_RESERVE3,	30062)
+
+package build.mockup_gui;
+
+public class KeyBios {
+#define EMPTY
+#define EVAL(X) X
+#define X(name, val) public static final int name##_ = name;
+KEY_CODES
+}
+#undef X
+#undef EMPTY

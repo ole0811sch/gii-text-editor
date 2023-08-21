@@ -1,28 +1,33 @@
-CC = clang
-CFLAGS = -Wall -pedantic -std=c99 -I
-SRC_DIR = ../src/ 
-BUILD_DIR = Build/
+JC = javac
+BLDDIR = Build
+ROOTPKG = me
+JFLAGS = -Xdiags:verbose -d $(BLDDIR)/ --class-path $(ROOTPKG)/
 
 .PHONY: all clean
 
-all: mockup.out
-	
-mockup.out: $(BUILD_DIR)dyn_arrs.o $(BUILD_DIR)editor.o $(BUILD_DIR)font.o $(BUILD_DIR)main.o $(BUILD_DIR)fxlib_mockup.o $(BUILD_DIR)util.o
+all: $(BLDDIR)/mockup_gui.jar
 
-$(BUILD_DIR)dyn_arrs.o: $(SRC_DIR)dyn_arrs.cpp $(SRC_DIR)dyn_arrs.h $(SRC_DIR)dyn_arr.h
-	$(CC) -c $(CFLAGS) $(SRC_DIR)dyn_arrs.cpp -o $(BUILD_DIR)dyn_arrs.o
+clean:
+	rm -f -r $(BLDDIR)/* $(ROOTPKG)/build/* $(ROOTPKG)/mockup_gui/*.class
+$(BLDDIR)/mockup_gui.jar: $(BLDDIR)/mockup_gui/RFC.class $(BLDDIR)/mockup_gui/KeyBios.class $(BLDDIR)/mockup_gui/Main.class
+	jar -v -c -f $@ -e mockup_gui.Main -C $(BLDDIR)/ .
 
-$(BUILD_DIR)editor.o: $(SRC_DIR)editor.cpp $(SRC_DIR)dyn_arrs.h $(SRC_DIR)dyn_arr.h $(SRC_DIR)fxlib.h $(SRC_DIR)keybios.h
-	$(CC) -c $(CFLAGS) $(SRC_DIR)editor.cpp -o $(BUILD_DIR)editor.o
+$(BLDDIR)/mockup_gui/RFC.class: $(ROOTPKG)/build/mockup_gui/RFC.java $(ROOTPKG)/mockup_gui/Main.java $(ROOTPKG)/build/mockup_gui/KeyBios.java
+	$(JC) $(JFLAGS) $<
 
-$(BUILD_DIR)font.o: $(SRC_DIR)font.cpp $(SRC_DIR)font.h
-	$(CC) -c $(CFLAGS) $(SRC_DIR)font.cpp -o $(BUILD_DIR)font.o
+$(BLDDIR)/mockup_gui/GUI.class: $(ROOTPKG)/mockup_gui/GUI.java
+	$(JC) $(JFLAGS) $<
 
-$(BUILD_DIR)main.o: $(SRC_DIR)main.cpp $(SRC_DIR)main.h $(SRC_DIR)editor.h $(SRC_DIR)util.h $(SRC_DIR)fxlib.h
-	$(CC) -c $(CFLAGS) $(SRC_DIR)main.cpp -o $(BUILD_DIR)main.o
+$(BLDDIR)/mockup_gui/KeyBios.class: $(ROOTPKG)/build/mockup_gui/KeyBios.java
+	$(JC) $(JFLAGS) $<
 
-$(BUILD_DIR)fxlib_mockup.o: $(SRC_DIR)fxlib_mockup.cpp $(SRC_DIR)fxlib_mockup.h $(SRC_DIR)keybios.h
-	$(CC) -c $(CFLAGS) fxlib_mockup.cpp -o $(BUILD_DIR)fxlib_mockup.o
+$(BLDDIR)/mockup_gui/Main.class: $(ROOTPKG)/mockup_gui/Main.java
+	$(JC) $(JFLAGS) $<
 
-$(BUILD_DIR)util.o: $(SRC_DIR)util.cpp $(SRC_DIR)util.h $(SRC_DIR)main.h $(SRC_DIR)fxlib.h
-	$(CC) -c $(CFLAGS) $(SRC_DIR)util.cpp -o $(BUILD_DIR)util.o
+$(ROOTPKG)/build/mockup_gui/RFC.java: $(ROOTPKG)/mockup_gui/rfc.hjava
+	mkdir -p $(ROOTPKG)/build/mockup_gui/
+	cpp -P $< -o $@
+
+$(ROOTPKG)/build/mockup_gui/KeyBios.java: $(ROOTPKG)/mockup_gui/keybios.hjava 
+	mkdir -p $(ROOTPKG)/build/mockup_gui/
+	cpp -P $< -o $@

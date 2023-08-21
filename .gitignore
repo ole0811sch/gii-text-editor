@@ -2,6 +2,9 @@ INIT/
 SDCard/
 Debug/
 
+mockup/Build/
+mockup/me/build/
+
 *.dlr
 *.G1A
 *.dlw

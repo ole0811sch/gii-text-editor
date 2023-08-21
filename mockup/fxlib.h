@@ -3,6 +3,10 @@
 
 #define INIT_ADDIN_APPLICATION(a, b) 0
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int GetKey(unsigned int *keycode);
 
 void Bdisp_SetPoint_DDVRAM(
@@ -25,5 +29,11 @@ void Bdisp_AllClr_DDVRAM(void);
 void PopUpWin(
 	int n // size of lines
 );
+
+void start_gui(const char* jar_path);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // FX_LIB_H_

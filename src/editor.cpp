@@ -386,15 +386,15 @@ void initialize_editor(const char* content) {
 
 	move_cursor(1);
 
-	
 	while (1) {
 		unsigned int key;
-		GetKey(&key);
+		int res = GetKey(&key);
 		int c = key_code_to_ascii(key);
 		if (c >= 0)
 			handle_char((char) c);
 		else if (c <= CODE_UP && c >= CODE_RIGHT)
 			handle_cursor_move(c);
+#ifdef MOCKUP
 		for (size_t i = 0; i < lines.count; ++i) {
 			char intermediate[256];
 			size_t line_bytes = lines.arr[i].string.count * sizeof(char);
@@ -404,12 +404,13 @@ void initialize_editor(const char* content) {
 					line_bytes);
 			intermediate[line_bytes] = '\0';
 			size_t bytes_written = 
-				snprintf(dbg_buf, 256, "%.3lu: %s", i, intermediate);
+				snprintf(dbg_buf, 256, "%.3lu: %s\n", i, intermediate);
 			if (bytes_written > 255)
 				bytes_written = 255;
 			dbg_buf[bytes_written] = '\0';
 			dbg_printf(_);
 		}
+#endif
 	}
 }
 

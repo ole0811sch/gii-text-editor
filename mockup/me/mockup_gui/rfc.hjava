@@ -1,0 +1,30 @@
+#include "../../rfc.h"
+
+package build.mockup_gui;
+
+import java.util.function.Function;
+import java.util.HashMap;
+import mockup_gui.*;
+
+public class RFC {
+	public static final class RFCSpec {
+		public final int bytes_args;
+		public final int bytes_return;
+		public final Function<byte[], byte[]> function;
+		public RFCSpec(int bytes_args, int bytes_return, 
+			Function<byte[], byte[]> function) {
+			this.bytes_args = bytes_args;
+			this.bytes_return = bytes_return;
+			this.function = function;
+		}
+	}
+
+	public static final HashMap<Integer, RFCSpec> map = new HashMap<>();
+	static {
+#define X(function, function_code, bytes_args, bytes_return) \
+		map.put(function_code, new RFCSpec(bytes_args, bytes_return,\
+			Main::call_##function));
+		RFCS
+#undef X
+	}
+}

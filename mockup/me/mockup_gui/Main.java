@@ -10,9 +10,9 @@ public class Main {
 	private static int SCREEN_HEIGHT;
 	private static byte current_code;
 	private static final int[] keycode_seq = new int[]{ KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_EXE_,
+		KeyBios.KEY_CTRL_EXE_,
+		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CHAR_SQUARE_,

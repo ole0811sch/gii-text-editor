@@ -254,17 +254,6 @@ static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs) {
 }
 
 /**
- * updates vline_begin and indices in vline_index by adding offs 
- */
-static void apply_offset_to_vline_index(line_t* line, ptrdiff_t offs) {
-	size_t* vline_starts = get_vline_starts(line, NULL);
-	for (size_t sb_i = 0; sb_i < line->count_softbreaks; ++sb_i) {
-		vline_starts[sb_i] += offs;
-	}
-	line->vline_begin += offs;
-}
-
-/**
  * updates lines, cursor and screen
  */
 static void insert_char(char c) {
@@ -308,8 +297,7 @@ static void update_changes_from(line_col_t begin) {
 		line_t* shift_line = &lines.arr[line_i];
 		ptrdiff_t offset = new_vline_begin - shift_line->vline_begin;
 		shifted |= offset != 0;
-		apply_offset_to_vline_index(shift_line,
-				offset);
+		shift_line->vline_begin += offset;
 	}
 
 	// scroll if necessary
@@ -389,7 +377,7 @@ void initialize_editor(const char* content) {
 
 	while (1) {
 		unsigned int key;
-		int res = GetKey(&key);
+		GetKey(&key);
 		int c = key_code_to_ascii(key);
 		if (c >= 0)
 			handle_char((char) c);

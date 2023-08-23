@@ -1,37 +1,39 @@
 CC = clang
 CFLAGS = -I../mockup -D MOCKUP -Wall -pedantic -Wno-unknown-pragmas -g
-OBJ = dyn_arrs.o editor.o font.o fxlib_mockup.o main.o util.o
+BLDDIR = Build
+OBJ = $(BLDDIR)/dyn_arrs.o $(BLDDIR)/editor.o $(BLDDIR)/font.o \
+	  $(BLDDIR)/fxlib_mockup.o $(BLDDIR)/main.o $(BLDDIR)/util.o
 
-.PHONY: all clean run
+.PHONY: all clean run build_dir
 
-all: mockup.out
+all: $(BLDDIR)/mockup.out
 	cd ../mockup/ && $(MAKE)
 
-run: all
-	./mockup.out ../mockup/build/mockup_gui.jar
-
 clean: 
-	rm -f $(OBJ) mockup.out
+	rm -f -r $(BLDDIR)/
 	cd ../mockup/ && $(MAKE) clean
 
 
-mockup.out: $(OBJ)
-	$(CC) $(CFLAGS) $^ -o mockup.out
+$(BLDDIR)/mockup.out: $(OBJ) | build_dir
+	$(CC) $(CFLAGS) $^ -o $@
 
-dyn_arrs.o: dyn_arrs.cpp dyn_arrs.h dyn_arr.h
+$(BLDDIR)/dyn_arrs.o: dyn_arrs.cpp dyn_arrs.h dyn_arr.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-editor.o: editor.cpp editor.h
+$(BLDDIR)/editor.o: editor.cpp editor.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-font.o: font.cpp font.h
+$(BLDDIR)/font.o: font.cpp font.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 	
-fxlib_mockup.o: fxlib_mockup.cpp ../mockup/fxlib.h ../mockup/rfc.h
+$(BLDDIR)/fxlib_mockup.o: fxlib_mockup.cpp ../mockup/fxlib.h ../mockup/rfc.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-main.o: main.cpp
+$(BLDDIR)/main.o: main.cpp | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
-util.o: util.cpp
+$(BLDDIR)/util.o: util.cpp | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
+
+build_dir: 
+	mkdir $(BLDDIR)

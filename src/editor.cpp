@@ -132,13 +132,14 @@ static void insert_line_break(void) {
 	new_line->count_softbreaks = 0;
 	new_line->vline_begin = 0;
 	dyn_arr_char_create(0, 2, 1, &new_line->string);
-	// calculate vline_index
-	recalculate_vline_index(new_line, 0);
 	
 	size_t transfer_count = line->string.count - cursor_pos.char_i;
 	// copy chars from old line
 	dyn_arr_char_add_all(&new_line->string, 
 			&line->string.arr[cursor_pos.char_i], transfer_count);
+
+	// calculate vline_index
+	recalculate_vline_index(new_line, 0);
 
 	// remove chars from old line
 	dyn_arr_char_pop_some(&line->string, transfer_count);
@@ -394,23 +395,6 @@ void initialize_editor(const char* content) {
 			handle_char((char) c);
 		else if (c <= CODE_UP && c >= CODE_RIGHT)
 			handle_cursor_move(c);
-#ifdef MOCKUP
-		for (size_t i = 0; i < lines.count; ++i) {
-			char intermediate[256];
-			size_t line_bytes = lines.arr[i].string.count * sizeof(char);
-			if (line_bytes > 255)
-				line_bytes = 255;
-			memcpy(intermediate, lines.arr[i].string.arr, 
-					line_bytes);
-			intermediate[line_bytes] = '\0';
-			size_t bytes_written = 
-				snprintf(dbg_buf, 256, "%.3lu: %s\n", i, intermediate);
-			if (bytes_written > 255)
-				bytes_written = 255;
-			dbg_buf[bytes_written] = '\0';
-			dbg_printf(_);
-		}
-#endif
 	}
 }
 

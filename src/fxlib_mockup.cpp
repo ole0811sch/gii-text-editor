@@ -31,6 +31,14 @@ static unsigned int bytes_to_int(unsigned char bytes[]) {
 	return bytes[0] + (bytes[1] << 8) + (bytes[2] << 16) + (bytes[3] << 24);
 }
 
+static void check_return_code(rfc_info_t info) {
+	int fcode = fgetc(stdin);
+	if (fcode != info.function_code) {
+		fprintf(stderr, "Invalid return function code");
+		exit(EXIT_FAILURE);
+	}
+}
+
 
 int GetKey(unsigned int *keycode) {
 	rfc_info_t info = GetKey_rfc;
@@ -40,9 +48,7 @@ int GetKey(unsigned int *keycode) {
 		perror("fflush");
 		exit(EXIT_FAILURE);
 	}
-	int res = fgetc(stdin);
-	if (res == EOF || res != info.function_code)
-		exit(EXIT_FAILURE);
+	check_return_code(info);
 	unsigned char rets[8];
 	for (size_t i = 0; i < 8; ++i) {
 		int res = fgetc(stdin);
@@ -59,7 +65,24 @@ void Bdisp_SetPoint_DDVRAM(
 	int y, // y coordinate
 	unsigned char point // kind of dot
 ) {
-	return;
+	rfc_info_t info = Bdisp_SetPoint_DDVRAM_rfc;
+	unsigned char out[10];
+	out[0] = info.function_code;
+	int_to_bytes((unsigned int) x, &out[1]);
+	int_to_bytes((unsigned int) y, &out[5]);
+	out[9] = point;
+	for (size_t i = 0; i < sizeof(out); ++i) {
+		if (fputc(out[i], stdout) == EOF) {
+			exit(EXIT_FAILURE);
+		}
+	}
+	if (fflush(stdout) == EOF) {
+		perror("fflush");
+		exit(EXIT_FAILURE);
+	}
+	check_return_code(info);
+	// fprintf(stderr, "x: %u %u %u %u\n", out[1], out[2], out[3], out[4]);
+	// fprintf(stderr, "y: %u %u %u %u\n", out[5], out[6], out[7], out[8]);
 }
 
 
@@ -88,10 +111,19 @@ void Print(
 		perror("fflush");
 		exit(EXIT_FAILURE);
 	}
+	check_return_code(info);
 }
 
 void Bdisp_AllClr_DDVRAM(void) {
-	return;
+	rfc_info_t info = Bdisp_AllClr_DDVRAM_rfc;
+	if (fputc(info.function_code, stdout) == EOF) {
+		exit(EXIT_FAILURE);
+	}
+	if (fflush(stdout) == EOF) {
+		perror("fflush");
+		exit(EXIT_FAILURE);
+	}
+	check_return_code(info);
 }
 
 void PopUpWin(
@@ -99,6 +131,7 @@ void PopUpWin(
 ) {
 	return;
 }
+
 
 void start_gui(const char* jar_path) {
 	int pipe_keys[2];
@@ -128,8 +161,17 @@ void start_gui(const char* jar_path) {
 			perror("close");
 		if (close(pipe_screen[0]) == -1)
 			perror("close");
-		execlp("java", "java", "-jar", jar_path, NULL);
-		// char (*args)[] = { "java", "-jar", jar_path, NULL };
+		char buf_width[20];
+		char buf_height[20];
+		if (sprintf(buf_width, "%u", RIGHT - LEFT) >= sizeof(buf_width) 
+				/ sizeof(buf_width[0])
+				|| sprintf(buf_height, "%u", BOTTOM - TOP) >= sizeof(buf_height) 
+				/ sizeof(buf_height[0])) {
+			fprintf(stderr, "sprintf in start_gui");
+			exit(EXIT_FAILURE);
+		}
+		execlp("java", "java", "-jar", "-ea", jar_path, buf_width, buf_height,
+				NULL);
 		perror("execlp");
 		exit(EXIT_FAILURE);
 	} else if (res != -1) { // parent
@@ -145,6 +187,30 @@ void start_gui(const char* jar_path) {
 			perror("close");
 		if (close(pipe_screen[1]) == -1)
 			perror("close");
+		// send handshake
+		for (size_t i = 0; i < HANDSHAKE_LENGTH; ++i) {
+			if (fputc(GETBYTE(i, HANDSHAKE), stdout) == EOF) {
+				exit(EXIT_FAILURE);
+			}
+		}
+		if (fflush(stdout) == EOF) {
+			perror("fflush");
+			exit(EXIT_FAILURE);
+		}
+		// wait for handshake
+		size_t next_byte; // index of the next byte in the handshake
+		for (next_byte = 0; next_byte < HANDSHAKE_LENGTH;) {
+			int res = fgetc(stdin);
+			if (res == EOF) {
+				exit(EXIT_FAILURE);
+			}
+			if (res == GETBYTE(next_byte, HANDSHAKE)) {
+				++next_byte;
+			}
+			else {
+				next_byte = 0;
+			}
+		}
 		return;
 	} else { // error
 		perror("fork");

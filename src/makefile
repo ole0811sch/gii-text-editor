@@ -7,8 +7,8 @@ OBJ = dyn_arrs.o editor.o font.o fxlib_mockup.o main.o util.o
 all: mockup.out
 	cd ../mockup/ && $(MAKE)
 
-run: 
-	java -jar -ea ../mockup/build/mockup_gui.jar
+run: all
+	./mockup.out ../mockup/build/mockup_gui.jar
 
 clean: 
 	rm -f $(OBJ) mockup.out
@@ -27,7 +27,7 @@ editor.o: editor.cpp editor.h
 font.o: font.cpp font.h
 	$(CC) $(CFLAGS) -c $< -o $@
 	
-fxlib_mockup.o: fxlib_mockup.cpp
+fxlib_mockup.o: fxlib_mockup.cpp ../mockup/fxlib.h ../mockup/rfc.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 main.o: main.cpp

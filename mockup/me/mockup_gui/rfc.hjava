@@ -19,6 +19,9 @@ public class RFC {
 		}
 	}
 
+	private static final int _HANDSHAKE_LENGTH = HANDSHAKE_LENGTH;
+#undef HANDSHAKE_LENGTH
+	public static final int HANDSHAKE_LENGTH = _HANDSHAKE_LENGTH;
 	public static final HashMap<Integer, RFCSpec> map = new HashMap<>();
 	static {
 #define X(function, function_code, bytes_args, bytes_return) \
@@ -26,5 +29,9 @@ public class RFC {
 			Main::call_##function));
 		RFCS
 #undef X
+	}
+
+	public static byte getHandshakeByte(int i) {
+		return (byte) GETBYTE(i, HANDSHAKE);
 	}
 }

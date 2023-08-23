@@ -31,4 +31,8 @@
 	X(PopUpWin, 5, 4, 0)
 
 // X(function, function_code, bytes_args, bytes_return)
+
+#define HANDSHAKE 0xb4d1d345
+#define HANDSHAKE_LENGTH 4
+#define GETBYTE(i, bytes) ((bytes & (0xFF << 8 * i)) >> 8 * i)
 #endif // RFC_H_

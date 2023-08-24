@@ -16,14 +16,12 @@ extern "C" {
 #include "dyn_arrs.h"
 #include "util.h"
 
-struct line_col {
+typedef struct {
 	// index of line (in lines)
 	size_t line;
 	// index of the char in the line's string
 	size_t char_i;
-};
-typedef struct line_col line_col_t;
-
+} line_chi_t;
 
 #define VLINE_INDEX_STATIC_ARR_SIZE 4
 
@@ -60,49 +58,7 @@ typedef struct {
 	dyn_arr_char_t string;
 } line_t;
 
-// static function declarations
-static void print_char_xy(unsigned char x, unsigned char y, char c, 
-		char negative);
-static void print_char(char_point_t point, char c, char negative);
-static void initialize_lines(const char* str);
-static void print_lines();
-static int print_line(size_t line_i);
-static int print_partial_line(line_col_t line_col);
-static void print_chars(unsigned char x, unsigned char y, const char* str);
-static char line_col_to_point(line_col_t line_col, point_t* point);
-static size_t line_col_to_vline(line_col_t line_col, unsigned char* x);
-static int key_code_to_ascii(unsigned int code);
-static void handle_char(char c);
-static void handle_cursor_move(int move);
-static void	handle_cursor_move_vertical(int move);
-static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks);
-static size_t* add_softbreak_to_index(line_t* current_line, size_t i);
-static void move_cursor(int mode);
-static int maybe_scroll_down(size_t cursor_vline);
-static int maybe_scroll_up(size_t vline);
-static void update_changes_from(line_col_t begin);
-static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs);
-
-
-// static variables
-
-
-static char capitalization_on = 0;
-static char capitalization_on_locked = 0;
-static line_col_t cursor_pos = { 0, 0 };
-/** 
- * vertical moves will try to get as close possible to cursor_x_target with the
- * cursor's x value if cursor_x_target is greater than the previous x value.
- * Setting the target to 0 means that the current x value is the
- * target.
- * Successful horizontal moves (including inserts and deletes) set 
- * cursor_x_target to 0. If a vertical 
- * move can't needs to reduce x (due to the line length), it updates
- * cursor_x_target to the old x value.
- */
-static unsigned char cursor_x_target = 0;
-
-
+// implementation of dyn_arr_line_t
 #undef DYN_ARR_H_
 #define DYN_ARR_IMPLEMENTATION
 #define DYN_ARR_CG_TYPE line_t
@@ -112,86 +68,208 @@ static unsigned char cursor_x_target = 0;
 #undef DYN_ARR_CG_TYPE
 #undef DYN_ARR_IMPLEMENTATION
 
-/**
- * starting with line 0, ordered.
- */
-static dyn_arr_line_t lines;
+typedef enum { 
+	/**
+	 * text is editable, you navigate with a cursor 
+	 */
+	CURSOR,
+	/**
+	 * text is not editable, you navigate by scrolling
+	 */
+	SCROLL 
+} interaction_mode_t;
 
 /**
- * first visible vline
+ * stores state and config of one text box
  */
-static size_t vvlines_begin = 0;
+typedef struct {
+	/**
+	 * number of chars that fit in one vline
+	 */
+	unsigned short width;
+	/**
+	 *
+	 * number of vlines that can displayed at once
+	 */
+	unsigned short height;
+	/**
+	 * scroll vs cursor
+	 */
+	interaction_mode_t interaction_mode;
 
-static void insert_line_break(void) {
+	/**
+	 * lines of the text box, ordered in ascending order
+	 */
+	dyn_arr_line_t lines;
+	/**
+	 * first visible vline
+	 */
+	size_t vvlines_begin;
+	/**
+	 * when in scroll mode, this stores state related to the cursor
+	 */
+	struct cursor_state {
+		/**
+		 * position of the cursor
+		 */
+		line_chi_t position;
+		/** 
+		 * vertical moves will try to get as close possible to cursor_x_target 
+		 * with the cursor's x value if cursor_x_target is greater than the 
+		 * previous x value.
+		 * Setting the target to 0 means that the current x value is the target.
+		 * Successful horizontal moves (including inserts and deletes) set 
+		 * cursor_x_target to 0. If a vertical move can't needs to reduce x (due
+		 * to the line length), it updates cursor_x_target to the old x value.
+		 */
+		unsigned char cursor_x_target;
+		/**
+		 * stores whether the text box can be edited
+		 */
+		char editable;
+		struct editable_state {
+			/**
+			 * if true, the next key stroke will be affect
+			 */
+			char capitalization_on;
+			/**
+			 * if true, all key strokes will be affect until it is turned off 
+			 * again
+			 */
+			char capitalization_on_locked;
+		} editable_state;
+	} cursor;
+} text_box_t;
+
+
+// static function declarations
+static void print_char_xy(unsigned char x, unsigned char y, char c, 
+		char negative);
+static void print_char(char_point_t point, char c, char negative);
+static void initialize_lines(text_box_t* box, const char* str);
+static void print_lines(text_box_t* box);
+static int print_line(text_box_t* box, size_t line_i);
+static int print_partial_line(text_box_t* box, line_chi_t line_chi);
+static void print_chars(unsigned char x, unsigned char y, const char* str);
+static char line_chi_to_point(text_box_t* box, line_chi_t line_chi, point_t* point);
+static size_t line_chi_to_vline(text_box_t* box, line_chi_t line_chi, unsigned char* x);
+static int key_code_to_ascii(text_box_t* box, unsigned int code);
+static void handle_char(text_box_t* box, char c);
+static void handle_cursor_move(text_box_t* box, int move);
+static void	handle_cursor_move_vertical(text_box_t* box, int move);
+static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks);
+static size_t* add_softbreak_to_index(line_t* current_line, size_t i);
+static void move_cursor(text_box_t* box, int mode);
+static int maybe_scroll_down(text_box_t* box, size_t cursor_vline);
+static int maybe_scroll_up(text_box_t* box, size_t vline);
+static void update_changes_from(text_box_t* box, line_chi_t begin);
+static ptrdiff_t recalculate_vline_index(text_box_t* box, line_t* line, size_t vline_offs);
+
+/**
+ * creates text box. The first vvline is 0 and cursor_pos is (0, 0). If
+ * interaction_mode isn't CURSOR, editable is ignored.
+ */
+static text_box_t create_text_box(unsigned short width,
+		unsigned short height, 
+		interaction_mode_t interaction_mode, 
+		char editable,
+		const char* text) {
+	text_box_t box;
+	box.width = width;
+	box.height = height;
+	box.interaction_mode = interaction_mode;
+	box.cursor.editable = interaction_mode == CURSOR && editable;
+	box.vvlines_begin = 0;
+	box.cursor.position.line = 0;
+	box.cursor.position.char_i = 0;
+	box.cursor.cursor_x_target = 0;
+	box.cursor.editable_state.capitalization_on = 0;
+	box.cursor.editable_state.capitalization_on_locked = 0;
+	initialize_lines(&box, text);
+	return box;
+}
+
+/**
+ * Expect box to be editable and in cursor mode
+ */
+static void insert_line_break(text_box_t* box) {
+	dyn_arr_line_t* lines = &box->lines;
+	line_chi_t* cursor_pos = &box->cursor.position;
 
 	// insert new line
 	line_t uninitialized;
-	dyn_arr_line_insert(&lines, uninitialized, cursor_pos.line + 1);
-	line_t* line = &lines.arr[cursor_pos.line];
-	line_t* new_line = &lines.arr[cursor_pos.line + 1];
+	dyn_arr_line_insert(lines, uninitialized, cursor_pos->line + 1);
+	line_t* line = &lines->arr[cursor_pos->line];
+	line_t* new_line = &lines->arr[cursor_pos->line + 1];
 	new_line->count_softbreaks = 0;
 	new_line->vline_begin = 0;
 	dyn_arr_char_create(0, 2, 1, &new_line->string);
 	
-	size_t transfer_count = line->string.count - cursor_pos.char_i;
+	size_t transfer_count = line->string.count - cursor_pos->char_i;
 	// copy chars from old line
 	dyn_arr_char_add_all(&new_line->string, 
-			&line->string.arr[cursor_pos.char_i], transfer_count);
+			&line->string.arr[cursor_pos->char_i], transfer_count);
 
 	// calculate vline_index
-	recalculate_vline_index(new_line, 0);
+	recalculate_vline_index(box, new_line, 0);
 
 	// remove chars from old line
 	dyn_arr_char_pop_some(&line->string, transfer_count);
 
-	line_col_t changes_begin = { cursor_pos.line, cursor_pos.char_i };
+	line_chi_t changes_begin = { cursor_pos->line, cursor_pos->char_i };
 	// this is necessary because the x value can be 0 and after a softbreak. 
 	// update_changes_from would
 	// then only start in the vline after that, even though we also need to
 	// remove the vline of the cursor position
 	if (changes_begin.char_i > 0)
 		--changes_begin.char_i;
-	move_cursor(0);
-	++cursor_pos.line;
-	cursor_pos.char_i = 0;
-	update_changes_from(changes_begin);
+	move_cursor(box, 0);
+	++cursor_pos->line;
+	cursor_pos->char_i = 0;
+	update_changes_from(box, changes_begin);
 
-	cursor_x_target = 0;
+	box->cursor.cursor_x_target = 0;
 }
 
-static void backspace(void) {
-	move_cursor(0);
+/**
+ * Expect box to be editable and in cursor mode
+ */
+static void backspace(text_box_t* box) {
+	move_cursor(box, 0);
 
-	line_t* line = &lines.arr[cursor_pos.line];
+	dyn_arr_line_t* lines = &box->lines;
+	line_t* line = &lines->arr[box->cursor.position.line];
 
-	if (cursor_pos.char_i == 0) {
-		if (cursor_pos.line == 0) {
+	if (box->cursor.position.char_i == 0) {
+		if (box->cursor.position.line == 0) {
 			// nothing to do
-			move_cursor(1);
+			move_cursor(box, 1);
 			return;
 		}
 		// concat with previous line
-		line_t* previous = &lines.arr[cursor_pos.line - 1];
-		line_col_t begin_change = { cursor_pos.line - 1, 
+		line_t* previous = &lines->arr[box->cursor.position.line - 1];
+		line_chi_t begin_change = { box->cursor.position.line - 1, 
 			previous->string.count };
 		if (dyn_arr_char_add_all(&previous->string, 
 					line->string.arr, line->string.count) == -1)
 			display_error("Out of memory");
 		dyn_arr_char_destroy(&line->string);
-		if (dyn_arr_line_remove(&lines, cursor_pos.line) == -1)
+		if (dyn_arr_line_remove(lines, box->cursor.position.line) == -1)
 			display_error("Out of memory");
-		cursor_pos = begin_change;
-		update_changes_from(begin_change);
+		box->cursor.position = begin_change;
+		update_changes_from(box, begin_change);
 	}
 	else {
-		if (dyn_arr_char_remove(&line->string, cursor_pos.char_i - 1) == -1)
+		if (dyn_arr_char_remove(&line->string, box->cursor.position.char_i - 1) 
+				== -1)
 			display_error("Out of memory");
-		--cursor_pos.char_i;
+		--box->cursor.position.char_i;
 
-		line_col_t begin_change = { cursor_pos.line, cursor_pos.char_i };
-		update_changes_from(begin_change);
+		line_chi_t begin_change = { box->cursor.position.line, 
+			box->cursor.position.char_i };
+		update_changes_from(box, begin_change);
 	}
-	cursor_x_target = 0;
+	box->cursor.cursor_x_target = 0;
 }
 
 /**
@@ -226,7 +304,8 @@ static void remove_last_n_softbreaks(line_t* line, size_t target_count) {
  * returns the difference in how many vlines there were before and after. If new
  * vlines were added, that number is positive.
  */
-static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs) {
+static ptrdiff_t recalculate_vline_index(text_box_t* box, line_t* line, 
+		size_t vline_offs) {
 	size_t count_softbreaks_start;
 	size_t* vline_starts = get_vline_starts(line, &count_softbreaks_start);
 	size_t  char_i; 
@@ -238,7 +317,7 @@ static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs) {
 
 	// recalculate existing starts
 	for (size_t sb_i = vline_offs; sb_i < line->count_softbreaks; ++sb_i) {
-		char_i += EDITOR_COLUMNS;
+		char_i += box->width;
 		if (char_i >= line->string.count) {
 			remove_last_n_softbreaks(line, sb_i);
 			break;
@@ -247,28 +326,28 @@ static ptrdiff_t recalculate_vline_index(line_t* line, size_t vline_offs) {
 	}
 
 	// add softbreaks until char_i is out of range of the line's string
-	while ((char_i += EDITOR_COLUMNS) < line->string.count)
+	while ((char_i += box->width) < line->string.count)
 		add_softbreak_to_index(line, char_i);
 	
 	return line->count_softbreaks - count_softbreaks_start;
 }
 
 /**
- * updates lines, cursor and screen
+ * updates lines, cursor and screen. Expects box to be editable and in cursor
+ * mode.
  */
-static void insert_char(char c) {
-	move_cursor(0);
+static void insert_char(text_box_t* box, char c) {
+	move_cursor(box, 0);
+	line_chi_t* cursor_pos = &box->cursor.position;
 
-	line_t* line = &lines.arr[cursor_pos.line];
-	if (dyn_arr_char_insert(&line->string, c, cursor_pos.char_i) == -1)
+	line_t* line = &box->lines.arr[cursor_pos->line];
+	if (dyn_arr_char_insert(&line->string, c, cursor_pos->char_i) == -1)
 		display_error("Out of memory");
-	++cursor_pos.char_i;
+	++cursor_pos->char_i;
 
-	line_col_t begin;
-	begin.line = cursor_pos.line;
-	begin.char_i = cursor_pos.char_i - 1;
-	cursor_x_target = 0;
-	update_changes_from(begin);
+	line_chi_t begin = { cursor_pos->line, cursor_pos->char_i - 1 };
+	box->cursor.cursor_x_target = 0;
+	update_changes_from(box, begin);
 }
 
 /**
@@ -279,55 +358,56 @@ static void insert_char(char c) {
  * The vlines of the subsequent lines are set so one directly follows its 
  * predecessor's last vline. 
  */
-static void update_changes_from(line_col_t begin) {
+static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	// find vline of begin
-	size_t vline = line_col_to_vline(begin, NULL);
-	line_t* line = &lines.arr[begin.line];
+	dyn_arr_line_t* lines = &box->lines;
+	size_t vline = line_chi_to_vline(box, begin, NULL);
+	line_t* line = &lines->arr[begin.line];
 
 	// recalculate vline_index of line, starting from vline's successor
-	recalculate_vline_index(line, vline - line->vline_begin);
+	recalculate_vline_index(box, line, vline - line->vline_begin);
 	// shift all subsequent vline_indices if necessary
 	char shifted = 0;
 	for (size_t line_i = begin.line + 1;
-			line_i < lines.count; 
+			line_i < lines->count; 
 			++line_i) {
-		line_t* last_line = &lines.arr[line_i - 1];
+		line_t* last_line = &lines->arr[line_i - 1];
 		size_t new_vline_begin = last_line->vline_begin 
 			+ last_line->count_softbreaks + 1;
-		line_t* shift_line = &lines.arr[line_i];
+		line_t* shift_line = &lines->arr[line_i];
 		ptrdiff_t offset = new_vline_begin - shift_line->vline_begin;
 		shifted |= offset != 0;
 		shift_line->vline_begin += offset;
 	}
 
 	// scroll if necessary
-	size_t new_vline = line_col_to_vline(cursor_pos, NULL);
-	line_t* last_line = DYN_ARR_LAST(&lines);
+	size_t new_vline = line_chi_to_vline(box, box->cursor.position, NULL);
+	line_t* last_line = DYN_ARR_LAST(lines);
 	size_t last_vline = last_line->count_softbreaks + last_line->vline_begin;
 	char scrolled = 1;
-	if (!maybe_scroll_down(new_vline)) {
-		if (last_vline >= EDITOR_LINES - 1) { 
+	if (!maybe_scroll_down(box, new_vline)) {
+		if (last_vline >= box->height - 1) { 
 			// without this the last lines could be blank when deleting
-			if (!maybe_scroll_up(last_vline - (EDITOR_LINES - 1))) {
-				if (!maybe_scroll_up(new_vline)) {
+			if (!maybe_scroll_up(box, last_vline - (box->height - 1))) {
+				if (!maybe_scroll_up(box, new_vline)) {
 					scrolled = 0;
 				}
 			}
 		}
 		else {
-			if (!maybe_scroll_up(new_vline)) {
+			if (!maybe_scroll_up(box, new_vline)) {
 				scrolled = 0;
 			}
 		}
 	}
 	if (!scrolled) {
 		// did not scroll, need to print manually
-		print_partial_line(begin);
+		print_partial_line(box, begin);
 		if (shifted) {
 			for (size_t line_i = begin.line + 1;
-					line_i < lines.count; 
+					line_i < lines->count; 
 					++line_i) {
-				if (!print_line(line_i))
+				if (!print_line(box, line_i))
 					// line_i was (partially) below visible area
 					break;
 			}
@@ -335,19 +415,26 @@ static void update_changes_from(line_col_t begin) {
 	}
 
 
-	move_cursor(1);
+	move_cursor(box, 1);
 }
 
-static void handle_char(char c) {
+/**
+ * if the interaction_mode isn't CURSOR and editable isn't true, this does
+ * nothing
+ */
+static void handle_char(text_box_t* box, char c) {
+	if (box->interaction_mode != CURSOR || !box->cursor.editable)
+		return;
+
 	switch(c) {
 		case '\n': 
-			insert_line_break();
+			insert_line_break(box);
 			break;
 		case '\x08':
-			backspace();
+			backspace(box);
 			break;
 		default:
-			insert_char(c);
+			insert_char(box, c);
 			break;
 	}
 }
@@ -356,9 +443,9 @@ static void handle_char(char c) {
 /**
  * mode = 1: print, mode = 0: erase
  */
-static void move_cursor(int mode) {
+static void move_cursor(text_box_t* box, int mode) {
 	point_t px;
-	if (!line_col_to_point(cursor_pos, &px))
+	if (!line_chi_to_point(box, box->cursor.position, &px))
 		return;
 
 	for (int y = -1; y < (int) CHAR_HEIGHT; ++y)
@@ -366,23 +453,22 @@ static void move_cursor(int mode) {
 }
 
 void initialize_editor(const char* content) { 
+	text_box_t box = create_text_box(EDITOR_COLUMNS, EDITOR_LINES, CURSOR, 1, 
+			content);
 	Bdisp_AllClr_DDVRAM();
-	initialize_lines(content);
-	print_lines();
+	initialize_lines(&box, content);
+	print_lines(&box);
 
-	cursor_pos.line = 0;
-	cursor_pos.char_i = 0;
-
-	move_cursor(1);
+	move_cursor(&box, 1);
 
 	while (1) {
 		unsigned int key;
 		GetKey(&key);
-		int c = key_code_to_ascii(key);
+		int c = key_code_to_ascii(&box, key);
 		if (c >= 0)
-			handle_char((char) c);
+			handle_char(&box, (char) c);
 		else if (c <= CODE_UP && c >= CODE_RIGHT)
-			handle_cursor_move(c);
+			handle_cursor_move(&box, c);
 	}
 }
 
@@ -392,10 +478,10 @@ void initialize_editor(const char* content) {
  *
  * returns whether it scrolled
  */
-static int maybe_scroll_up(size_t vline) {
-	if (vline < vvlines_begin) {
-		vvlines_begin = vline;
-		print_lines();
+static int maybe_scroll_up(text_box_t* box, size_t vline) {
+	if (vline < box->vvlines_begin) {
+		box->vvlines_begin = vline;
+		print_lines(box);
 		return 1;
 	}
 	return 0;
@@ -407,50 +493,56 @@ static int maybe_scroll_up(size_t vline) {
  *
  * returns whether it scrolled
  */
-static int maybe_scroll_down(size_t vline) {
-	if (vline >= vvlines_begin + EDITOR_LINES) {
-		vvlines_begin = vline - EDITOR_LINES + 1;
-		print_lines();
+static int maybe_scroll_down(text_box_t* box, size_t vline) {
+	if (vline >= box->vvlines_begin + box->height) {
+		box->vvlines_begin = vline - box->height + 1;
+		print_lines(box);
 		return 1;
 	}
 	return 0;
 }
 
-static void handle_cursor_move(int move) {
-	move_cursor(0);
+/**
+ * expects box to be in cursor mode
+ */
+static void handle_cursor_move(text_box_t* box, int move) {
+	line_chi_t* cursor_pos = &box->cursor.position;
+	move_cursor(box, 0);
 	switch (move) {
 		case CODE_LEFT:
-			if (cursor_pos.char_i > 0) {
-				--cursor_pos.char_i;
-				size_t vline = line_col_to_vline(cursor_pos, NULL);
-				cursor_x_target = 0;
-				maybe_scroll_up(vline);
+			if (cursor_pos->char_i > 0) {
+				--cursor_pos->char_i;
+				size_t vline = line_chi_to_vline(box, *cursor_pos, NULL);
+				box->cursor.cursor_x_target = 0;
+				maybe_scroll_up(box, vline);
 			}
 			break;
 		case CODE_RIGHT:
-			if (cursor_pos.char_i < lines.arr[cursor_pos.line].string.count) {
-				++cursor_pos.char_i;
-				size_t vline = line_col_to_vline(cursor_pos, NULL);
-				cursor_x_target = 0;
-				maybe_scroll_down(vline);
+			if (cursor_pos->char_i < box->lines.arr[cursor_pos->line].string
+					.count) {
+				++cursor_pos->char_i;
+				size_t vline = line_chi_to_vline(box, *cursor_pos, NULL);
+				box->cursor.cursor_x_target = 0;
+				maybe_scroll_down(box, vline);
 			}
 			break;
 		default:
-			handle_cursor_move_vertical(move);
+			handle_cursor_move_vertical(box, move);
 	}
 
-	// if (moved)
-		// correct_char_pos(horizontal_move);
-	move_cursor(1);
+	move_cursor(box, 1);
 }
 
 /**
- * updates cursor_pos according to move
+ * updates cursor_pos according to move. Expects box to be in cursor mode
  */
-static void	handle_cursor_move_vertical(int move) {
+static void	handle_cursor_move_vertical(text_box_t* box, int move) {
+	line_chi_t* cursor_pos = &box->cursor.position;
+	dyn_arr_line_t* lines = &box->lines;
+
 	size_t count_softbreaks;
 	size_t* vline_starts_old = // vline starts of old line of cursor
-		get_vline_starts(&lines.arr[cursor_pos.line], &count_softbreaks);
+		get_vline_starts(&lines->arr[cursor_pos->line], &count_softbreaks);
 	size_t new_line_i;
 	// offset of the vline of the new position relative to the line's
 	// vline_begin
@@ -459,44 +551,45 @@ static void	handle_cursor_move_vertical(int move) {
 
 	if (move == CODE_UP) {
 		if (vline_starts_old == NULL 
-				|| cursor_pos.char_i < vline_starts_old[0]) { 
+				|| cursor_pos->char_i < vline_starts_old[0]) { 
 			// in first vline of line
-			if (cursor_pos.line == 0)
+			if (cursor_pos->line == 0)
 				return;
-			new_line_i = cursor_pos.line - 1;
-			new_vline_offs = lines.arr[new_line_i].count_softbreaks;
-			x = cursor_pos.char_i;
+			new_line_i = cursor_pos->line - 1;
+			new_vline_offs = lines->arr[new_line_i].count_softbreaks;
+			x = cursor_pos->char_i;
 		}
 		else { // we stay in the same line
-			new_line_i = cursor_pos.line;
-			size_t current_vline = line_col_to_vline(cursor_pos, &x);
-			new_vline_offs = current_vline - lines.arr[new_line_i].vline_begin 
+			new_line_i = cursor_pos->line;
+			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x);
+			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
 				- 1;
 		}
 	}
 	else { // down
 		if (vline_starts_old == NULL 
-				|| cursor_pos.char_i >= vline_starts_old[count_softbreaks - 1]) { 
+				|| cursor_pos->char_i >= vline_starts_old[count_softbreaks - 1]) { 
 			// last vline of line
-			if (cursor_pos.line == lines.count - 1)
+			if (cursor_pos->line == lines->count - 1)
 				return;
-			new_line_i = cursor_pos.line + 1;
+			new_line_i = cursor_pos->line + 1;
 			new_vline_offs = 0;
-			line_col_to_vline(cursor_pos, &x);
+			line_chi_to_vline(box, *cursor_pos, &x);
 		}
 		else { // we stay in the same line
-			new_line_i = cursor_pos.line;
-			size_t current_vline = line_col_to_vline(cursor_pos, &x);
-			new_vline_offs = current_vline - lines.arr[new_line_i].vline_begin 
+			new_line_i = cursor_pos->line;
+			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x);
+			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
 				+ 1;
 		}
 	}
 
-	// tentatively set x to max(x, cursor_x_target)
-	if (cursor_x_target > x)
-		x = cursor_x_target;
+	unsigned char* cursor_x_target = &box->cursor.cursor_x_target;
+	// tentatively set x to max(x, *cursor_x_target)
+	if (*cursor_x_target > x)
+		x = *cursor_x_target;
 
-	line_t* new_line = &lines.arr[new_line_i];
+	line_t* new_line = &lines->arr[new_line_i];
 	size_t count_softbreaks_new;
 	size_t* vline_starts_new = // vline starts of new line of cursor
 		get_vline_starts(new_line, &count_softbreaks_new);
@@ -510,20 +603,20 @@ static void	handle_cursor_move_vertical(int move) {
 	// number of chars in vline
 	size_t vline_length = new_line->string.count - begin_i;
 	if (x >= vline_length) { // there is no char at x pos in the vline,
-		// cursor_pos.char_i is after last char in line
-		cursor_pos.char_i = new_line->string.count;
-		cursor_x_target = x;
+		// cursor_pos->char_i is after last char in line
+		cursor_pos->char_i = new_line->string.count;
+		*cursor_x_target = x;
 	}
 	else {
-		cursor_pos.char_i = begin_i + x;
+		cursor_pos->char_i = begin_i + x;
 	}
 
-	cursor_pos.line = new_line_i;
+	cursor_pos->line = new_line_i;
 
 	if (move == CODE_UP)
-		maybe_scroll_up(new_line->vline_begin + new_vline_offs);
+		maybe_scroll_up(box, new_line->vline_begin + new_vline_offs);
 	else 
-		maybe_scroll_down(new_line->vline_begin + new_vline_offs);
+		maybe_scroll_down(box, new_line->vline_begin + new_vline_offs);
 }
 
 /**
@@ -546,7 +639,7 @@ static size_t* get_vline_starts(line_t* line, size_t* count_softbreaks) {
  * any ascii code, or -3 to -6 (CODE_{UP, DOWN, RIGHT, LEFT}) when the
  * navigation buttons were used. Backspace is '\x08', enter is '\n'.
  */
-static int key_code_to_ascii(unsigned int code) {
+static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 	const signed char capitalization_once = -1;
 	const signed char capitalization_lock = -2;
 #define EASY_CASES \
@@ -626,18 +719,21 @@ static int key_code_to_ascii(unsigned int code) {
 #undef EASY_CASE
 		default: return -1;
 	}
+	char* capitalization_on = &box->cursor.editable_state.capitalization_on;
+	char* capitalization_on_locked = &box->cursor.editable_state
+		.capitalization_on_locked;
 	if (ch == capitalization_once) {
-		capitalization_on = true;
+		*capitalization_on = true;
 		return -1;
 	} else if (ch == capitalization_lock) {
-		capitalization_on_locked ^= true;
+		*capitalization_on_locked ^= true;
 		return -1;
 	} else if (ch < 0) {
 		return ch;
 	}
 
-	if (capitalization_on || capitalization_on_locked) {
-		capitalization_on = false;
+	if (*capitalization_on || *capitalization_on_locked) {
+		*capitalization_on = false;
 		switch (ch) {
 			case '"': return '\'';
 			case '(': return '<';
@@ -663,17 +759,18 @@ static int key_code_to_ascii(unsigned int code) {
 }
 
 /**
- * if x isn't null, it is set to the char_point_t x value that line_col
+ * if x isn't null, it is set to the char_point_t x value that line_chi
  * corresponds to. If char_i is greater than the index of the last char of the
  * line, the last vline of the line is returned, x will be greater than
  * EDITOR_COLUMNS.
  */
-static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
-	line_t* line = &lines.arr[line_col.line];
+static size_t line_chi_to_vline(text_box_t* box, line_chi_t line_chi, 
+		unsigned char* x) {
+	line_t* line = &box->lines.arr[line_chi.line];
 	if (line->count_softbreaks == 0) {
 		// line is contained in one vline
 		if (x != NULL)
-			*x = line_col.char_i;
+			*x = line_chi.char_i;
 
 		return line->vline_begin;
 	}
@@ -682,18 +779,18 @@ static size_t line_col_to_vline(line_col_t line_col, unsigned char* x) {
 	// find the correct array
 	size_t* vline_starts = get_vline_starts(line, NULL);
 
-	// check if the the cursor is in first vline of the line
-	if (line_col.char_i < vline_starts[0]) {
+	// check if the line_chi is in first vline of the line
+	if (line_chi.char_i < vline_starts[0]) {
 		if (x != NULL)
-			*x = line_col.char_i;
+			*x = line_chi.char_i;
 		return line->vline_begin;
 	}
 
 	size_t vline_index = dyn_arr_size_raw_bsearch(vline_starts, 
-			line->count_softbreaks, line_col.char_i);
+			line->count_softbreaks, line_chi.char_i);
 
 	if (x != NULL)
-		*x = line_col.char_i - vline_starts[vline_index];
+		*x = line_chi.char_i - vline_starts[vline_index];
 
 	return vline_index + 1 + line->vline_begin;
 }
@@ -709,33 +806,34 @@ static point_t char_point_to_point(char_point_t point) {
 }
 
 /**
- * returns whether line_col is currently even visible
- * If line_col is visible, point is set to the pixel coordinate of top left 
+ * returns whether line_chi is currently even visible
+ * If line_chi is visible, point is set to the pixel coordinate of top left 
  * corner of that character coordinate.
  */
-static char line_col_to_point(line_col_t line_col, point_t* point) {
+static char line_chi_to_point(text_box_t* box, line_chi_t line_chi, 
+		point_t* point) {
 	unsigned char x;
-	size_t vline = line_col_to_vline(line_col, &x);
+	size_t vline = line_chi_to_vline(box, line_chi, &x);
 	
-	if (vline < vvlines_begin || vline >= vvlines_begin + EDITOR_LINES)
+	if (vline < box->vvlines_begin || vline >= box->vvlines_begin + box->height)
 		return 0;
 
 	char_point_t ch_point;
 	ch_point.x = x;
-	ch_point.y = vline - vvlines_begin;
+	ch_point.y = vline - box->vvlines_begin;
 	*point = char_point_to_point(ch_point);
 	return 1;
 }
 
 /**
- * adds an empty line_t to lines
+ * adds an empty line_t to box->lines
  */
-static void add_new_line(size_t vline_begin) {
+static void add_new_line(text_box_t* box, size_t vline_begin) {
 	line_t new_line;
 	new_line.vline_begin = vline_begin;
 	new_line.count_softbreaks = 0;
-	dyn_arr_line_add(&lines, new_line);
-	dyn_arr_char_t* string = &DYN_ARR_LAST(&lines)->string;
+	dyn_arr_line_add(&box->lines, new_line);
+	dyn_arr_char_t* string = &DYN_ARR_LAST(&box->lines)->string;
 	if (dyn_arr_char_create(1, 2, 1, string) == -1)
 		display_error("Out of memory");
 }
@@ -772,17 +870,19 @@ static size_t* add_softbreak_to_index(line_t* current_line, size_t i) {
 }
 
 /**
- * fills lines with str. lines should be uninitialized at this point.
+ * fills box->lines with str. box->lines should be uninitialized at this
+ * point.
  */
-static void initialize_lines(const char* str) {
-	if(dyn_arr_line_create(10, 2, 1, &lines) == -1)
+static void initialize_lines(text_box_t* box, const char* str) {
+	if(dyn_arr_line_create(10, 2, 1, &box->lines) == -1)
 		display_error("Out of memory");
 
 	if (*str == '\0')
 		return;
 	
-	add_new_line(0);
-	line_t* current_line = DYN_ARR_LAST(&lines);
+	dyn_arr_line_t* lines = &box->lines;
+	add_new_line(box, 0);
+	line_t* current_line = DYN_ARR_LAST(lines);
 	unsigned char col = 0;
 	size_t vline = 0;
 	size_t i = 0;
@@ -791,8 +891,8 @@ static void initialize_lines(const char* str) {
 		if (str[i] == '\n') {
 			++vline;
 			line_starting_index = i + 1;
-			add_new_line(vline);
-			current_line = DYN_ARR_LAST(&lines);
+			add_new_line(box, vline);
+			current_line = DYN_ARR_LAST(lines);
 			col = 0;
 		} 
 		else {
@@ -809,50 +909,51 @@ static void initialize_lines(const char* str) {
 	}
 }
 
-static int print_line(size_t line_i) {
-	line_col_t line_col = { line_i, 0 };
-	return print_partial_line(line_col);
+static int print_line(text_box_t* box, size_t line_i) {
+	line_chi_t line_chi = { line_i, 0 };
+	return print_partial_line(box, line_chi);
 }
 
 /**
- * prints starting from line_col
+ * prints starting from line_chi
  *
  * Return 1 if none of the vlines that should be printed were below what is
  * currently visible, otherwise returns 0.
  */
-static int print_partial_line(line_col_t line_col) {
-	line_t* line = &lines.arr[line_col.line];
+static int print_partial_line(text_box_t* box, line_chi_t line_chi) {
+	dyn_arr_line_t* lines = &box->lines;
+	line_t* line = &lines->arr[line_chi.line];
 	// exclusive, end of the visible vlines of this line
 	size_t vvlines_local_end;	
-	if (line_col.line == lines.count - 1) { // line_col.line is the last line 
+	if (line_chi.line == lines->count - 1) { // line_chi.line is the last line 
 		vvlines_local_end = line->vline_begin + line->count_softbreaks + 1;
 	}
 	else
-		vvlines_local_end = lines.arr[line_col.line + 1].vline_begin;
+		vvlines_local_end = lines->arr[line_chi.line + 1].vline_begin;
 
-	if (vvlines_local_end > vvlines_begin + EDITOR_LINES) 
+	if (vvlines_local_end > box->vvlines_begin + box->height) 
 		// line ends outside of visible area
-		vvlines_local_end = vvlines_begin + EDITOR_LINES;
+		vvlines_local_end = box->vvlines_begin + box->height;
 
-	// find vline and x value that correspond to line_col or if these aren't
+	// find vline and x value that correspond to line_chi or if these aren't
 	// visible, the first that are.
 	size_t char_i; // index in the string
 	unsigned char x;
-	size_t vline = line_col_to_vline(line_col, &x); 
-	if (vline < vvlines_begin) {
-		if (line->vline_begin + line->count_softbreaks < vvlines_begin)
-			// last vline of line isn't even visible, nothing to print
+	size_t vline = line_chi_to_vline(box, line_chi, &x); 
+	if (vline < box->vvlines_begin) {
+		if (line->vline_begin + line->count_softbreaks < box->vvlines_begin)
+			// even last vline of line isn't visible, nothing to print
 			return 0;
-		// first vline is before vvlines_begin, last is not before 
+		// first vline is before vvlines_begin, last is not
 		// => vvlines_begin is a vline of the line
-		vline = vvlines_begin;
+		vline = box->vvlines_begin;
 		x = 0;
 		// find new starting index
 		size_t* vline_starts = get_vline_starts(line, NULL);
 		char_i = vline_starts[vline - line->vline_begin - 1];
 	}
 	else
-		char_i = line_col.char_i;
+		char_i = line_chi.char_i;
 
 
 	
@@ -862,7 +963,7 @@ static int print_partial_line(line_col_t line_col) {
 			++vline;
 			continue;
 		}
-		print_char_xy(x, vline - vvlines_begin, line->string.arr[char_i], 0);
+		print_char_xy(x, vline - box->vvlines_begin, line->string.arr[char_i], 0);
 		++char_i;
 		++x;
 	}
@@ -872,7 +973,7 @@ static int print_partial_line(line_col_t line_col) {
 		return 0;
 
 	while (x < EDITOR_COLUMNS) {
-		print_char_xy(x, vline - vvlines_begin, ' ', 0);
+		print_char_xy(x, vline - box->vvlines_begin, ' ', 0);
 		++x;
 	}
 
@@ -919,11 +1020,11 @@ static int compare_lines_vline_begin(const void* vline_void,
 	return 0;
 }
 
-static void print_lines() {
-	size_t first_line = dyn_arr_line_bsearch_cb(&lines, (void*) &vvlines_begin, 
-			&compare_lines_vline_begin);
-	for (size_t i = first_line; i < lines.count; ++i)
-		if (!print_line(i))
+static void print_lines(text_box_t* box) {
+	size_t first_line = dyn_arr_line_bsearch_cb(&box->lines, 
+			(void*) &box->vvlines_begin, &compare_lines_vline_begin);
+	for (size_t i = first_line; i < box->lines.count; ++i)
+		if (!print_line(box, i))
 			break;
 }
 

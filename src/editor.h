@@ -32,6 +32,7 @@ void initialize_editor(const char* content);
 #define MARGIN_TOP 1
 #define MARGIN_LEFT 1
 
+// height and width of one character in pixels
 #define CHAR_HEIGHT (sizeof(font[0]) / sizeof(font[0][0]))
 #define CHAR_WIDTH (sizeof(font[0][0]))
 

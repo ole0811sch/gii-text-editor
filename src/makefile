@@ -36,4 +36,4 @@ $(BLDDIR)/util.o: util.cpp | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build_dir: 
-	mkdir $(BLDDIR)
+	mkdir -p $(BLDDIR)

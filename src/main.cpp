@@ -7,9 +7,13 @@
 /*   Copyright (c) 2006 CASIO COMPUTER CO., LTD.                 */
 /*                                                               */
 /*****************************************************************/
+#ifdef __cplusplus
 extern "C" {
+#endif
 #include "fxlib.h"
+#ifdef __cplusplus
 }
+#endif
 #include "editor.h"
 #include "util.h"
 #include <string.h>

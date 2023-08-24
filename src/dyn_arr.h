@@ -1,3 +1,78 @@
+/**
+ * guards:
+ * #ifndef DYN_ARR_H_
+ * // declarations
+ * #endif
+ * #ifdef DYN_ARR_IMPLEMENTATION
+ * // implementation
+ * #endif
+ * The implementation relies on the declarations.
+ *
+ * If you want to get the declarations, you need to make sure that
+ * DYN_ARR_H_ is not defined. In case you already included the declarations
+ * for another type, you need to undefine DYN_ARR_H_.
+ * If you want to get the implementation, you also need to make sure that
+ * DYN_ARR_H_ is not defined, or that you already have the declaration for that
+ * type.
+ *
+ * Configuration macros:
+ * DYN_ARR_CG_TYPE: the type to store, e.g. `size_t` or `struct some_struct`.
+ *
+ * DYN_ARR_CG_SUFFIX: the string that is used in the names (denoted with $type
+ * in the documentation). Must not contain anything that cannot be in the middle
+ * of an identifier (like spaces or dashes).
+ *
+ * DYN_ARR_CG_STATIC (optional): define as static if you want the functions to
+ * be static (default not static).
+ *
+ * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR and 
+ * DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR (optional): the next smaller 
+ * capacity nc is taken if nc * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR / 
+ * DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR is still greater than the number of
+ * elements in the array (default 3 and 4).
+ *
+ * DYN_ARR_CG_SIMPLE_COMPARISON (optional): define this to include the binary 
+ * search functions that directly use <, > and = for comparison.
+ *
+ * DYN_ARR_CG_MALLOC, DYN_ARR_CG_FREE and DYN_ARR_CG_REALLOC (optional): 
+ * functions used for malloc, free and realloc, respectively. Should behave 
+ * like the standard implementation, which is the default. If one is defined,
+ * all need to be defined.
+ *
+ * None of the configuration macros will be undefined after the header.
+ *
+ * Example usage:
+ *
+ * -- dynamic_string.c --
+ *  #define DYN_ARR_IMPLEMENTATION
+ *  #define DYN_ARR_CG_TYPE char
+ *  #define DYN_ARR_CG_SUFFIX char
+ *  #define DYN_ARR_CG_SIMPLE_COMPARISON
+ *  #include "dyn_arr.h"
+ *  #undef DYN_ARR_IMPLEMENTATION
+ *  #undef DYN_ARR_CG_TYPE
+ *  #undef DYN_ARR_CG_SUFFIX
+ *  #undef DYN_ARR_CG_SIMPLE_COMPARISON
+ *
+ * -- dynamic_string.h -- 
+ *  #define DYN_ARR_CG_TYPE char
+ *  #define DYN_ARR_CG_SUFFIX char
+ *  #define DYN_ARR_CG_SIMPLE_COMPARISON
+ *  #include "dyn_arr.h"
+ *  #undef DYN_ARR_CG_TYPE
+ *  #undef DYN_ARR_CG_SUFFIX
+ *  #undef DYN_ARR_CG_SIMPLE_COMPARISON
+ *
+ * -- some_other_file.c --
+ *  #include "dynamic_string.h"
+ *  dyn_arr_char_t str;
+ *  dyn_arr_char_create(10, //	initial capacity
+ *  	3,	// growth factor numerator
+ *  	2, 	// growth factor denominator
+*  		&str);
+*  	...
+ */
+
 #ifndef DYN_ARR_CG_TYPE
 #error "You need to define DYN_ARR_CG_TYPE to use the implementation of dyn_arr.h" 
 #endif // DYN_ARR_CG_TYPE
@@ -35,12 +110,6 @@
 #define DYN_ARR_CG_STATIC
 #endif // DYN_ARR_CG_STATIC
 
-/**
- * the next smaller capacity nc is taken if nc *
- * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR / 
- * DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR is still greater than the number of
- * elements in the array.
- */
 #ifndef DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
 #define DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 3
 #endif // DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
@@ -177,6 +246,7 @@ PFX size_t DYN_ARR_RAW_BSEARCH_CB(const DYN_ARR_CG_TYPE* arr, size_t n,
 }
 #endif // __cplusplus
 
+#endif // DYN_ARR_H_
 #ifdef DYN_ARR_IMPLEMENTATION
 
 #define DYN_ARR_TMP (defined DYN_ARR_CG_FREE) + (defined DYN_ARR_CG_REALLOC) \
@@ -326,9 +396,6 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr) {
 	return _DYN_ARR_MAYBE_SHRINK(dyn_arr);
 }
 
-#include "util.h"
-#include <stdio.h>
-
 PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n) {
 	if (n > dyn_arr->count)
 		n = dyn_arr->count;
@@ -403,7 +470,6 @@ PFX void DYN_ARR_DESTROY(DYN_ARR_T* dyn_arr) {
 }
 
 #endif // DYN_ARR_IMPLEMENTATION
-#endif // DYN_ARR_H_
 
 #undef DYN_ARR_T
 #undef PFX

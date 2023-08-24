@@ -1,8 +1,9 @@
 CC = clang
-CFLAGS = -I../mockup -D MOCKUP -Wall -pedantic -Wno-unknown-pragmas -g
+CFLAGS = -I../mockup -D MOCKUP -x c -std=c99 -Wall -pedantic -Wno-unknown-pragmas -g
 BLDDIR = Build
 OBJ = $(BLDDIR)/dyn_arrs.o $(BLDDIR)/editor.o $(BLDDIR)/font.o \
-	  $(BLDDIR)/fxlib_mockup.o $(BLDDIR)/main.o $(BLDDIR)/util.o
+	  $(BLDDIR)/fxlib_mockup.o $(BLDDIR)/main.o $(BLDDIR)/util.o \
+	  $(BLDDIR)/line.o
 
 .PHONY: all clean run build_dir
 
@@ -15,12 +16,15 @@ clean:
 
 
 $(BLDDIR)/mockup.out: $(OBJ) | build_dir
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) -x none $^ -o $@
 
 $(BLDDIR)/dyn_arrs.o: dyn_arrs.cpp dyn_arrs.h dyn_arr.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BLDDIR)/editor.o: editor.cpp editor.h | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BLDDIR)/line.o: line.cpp line.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BLDDIR)/font.o: font.cpp font.h | build_dir

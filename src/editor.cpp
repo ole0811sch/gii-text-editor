@@ -1,145 +1,9 @@
+#include "editor.h"
+
 #include <stdio.h>
 #include <math.h>
-#include <stddef.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include "fxlib.h"
-#include "keybios.h"
-#ifdef __cplusplus
-}
-#endif
-
-#include "font.h"
-#include "editor.h"
-#include "dyn_arrs.h"
-#include "util.h"
-
-typedef struct {
-	// index of line (in lines)
-	size_t line;
-	// index of the char in the line's string
-	size_t char_i;
-} line_chi_t;
-
-#define VLINE_INDEX_STATIC_ARR_SIZE 4
-
-/**
- * stores any number of size_t values. If they're at most 
- * VLINE_INDEX_STATIC_ARR_SIZE, they are stored in a static array, otherwise in
- * a dynamic array.
- */
-typedef union {
-	size_t s_arr[VLINE_INDEX_STATIC_ARR_SIZE];
-	dyn_arr_size_t d_arr;
-} vline_index_t;
-
-typedef struct {
-	/**
-	 * Number of softbreaks in this line. If count is at most 
-	 * VLINE_INDEX_STATIC_ARR_SIZE, vline_index stores the indices in s_arr,
-	 * otherwise in d_arr.
-	 */
-	size_t count_softbreaks;
-	/** 
-	 * index of the line that's printed where this line starts. One line with
-	 * one soft break correspond to two vlines.
-	 */
-	size_t vline_begin;
-	/**
-	 * indices of the softbreaks. Represented as the index of the first char in
-	 * the new vline
-	 */
-	vline_index_t vline_index;
-	/**
-	 * text of the line. Does not include '\n', not NUL-terminated.
-	 */
-	dyn_arr_char_t string;
-} line_t;
-
-// implementation of dyn_arr_line_t
-#undef DYN_ARR_H_
-#define DYN_ARR_IMPLEMENTATION
-#define DYN_ARR_CG_TYPE line_t
-#define DYN_ARR_CG_SUFFIX line
-#include "dyn_arr.h"
-#undef DYN_ARR_CG_SUFFIX
-#undef DYN_ARR_CG_TYPE
-#undef DYN_ARR_IMPLEMENTATION
-
-typedef enum { 
-	/**
-	 * text is editable, you navigate with a cursor 
-	 */
-	CURSOR,
-	/**
-	 * text is not editable, you navigate by scrolling
-	 */
-	SCROLL 
-} interaction_mode_t;
-
-/**
- * stores state and config of one text box
- */
-typedef struct {
-	/**
-	 * number of chars that fit in one vline
-	 */
-	unsigned short width;
-	/**
-	 *
-	 * number of vlines that can displayed at once
-	 */
-	unsigned short height;
-	/**
-	 * scroll vs cursor
-	 */
-	interaction_mode_t interaction_mode;
-
-	/**
-	 * lines of the text box, ordered in ascending order
-	 */
-	dyn_arr_line_t lines;
-	/**
-	 * first visible vline
-	 */
-	size_t vvlines_begin;
-	/**
-	 * when in scroll mode, this stores state related to the cursor
-	 */
-	struct cursor_state {
-		/**
-		 * position of the cursor
-		 */
-		line_chi_t position;
-		/** 
-		 * vertical moves will try to get as close possible to cursor_x_target 
-		 * with the cursor's x value if cursor_x_target is greater than the 
-		 * previous x value.
-		 * Setting the target to 0 means that the current x value is the target.
-		 * Successful horizontal moves (including inserts and deletes) set 
-		 * cursor_x_target to 0. If a vertical move can't needs to reduce x (due
-		 * to the line length), it updates cursor_x_target to the old x value.
-		 */
-		unsigned char cursor_x_target;
-		/**
-		 * stores whether the text box can be edited
-		 */
-		char editable;
-		struct editable_state {
-			/**
-			 * if true, the next key stroke will be affect
-			 */
-			char capitalization_on;
-			/**
-			 * if true, all key strokes will be affect until it is turned off 
-			 * again
-			 */
-			char capitalization_on_locked;
-		} editable_state;
-	} cursor;
-} text_box_t;
+#include <string.h>
+#include <stdlib.h>
 
 
 // static function declarations
@@ -197,7 +61,7 @@ static void insert_line_break(text_box_t* box) {
 	line_chi_t* cursor_pos = &box->cursor.position;
 
 	// insert new line
-	line_t uninitialized;
+	line_t uninitialized = {0};
 	dyn_arr_line_insert(lines, uninitialized, cursor_pos->line + 1);
 	line_t* line = &lines->arr[cursor_pos->line];
 	line_t* new_line = &lines->arr[cursor_pos->line + 1];
@@ -723,17 +587,17 @@ static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 	char* capitalization_on_locked = &box->cursor.editable_state
 		.capitalization_on_locked;
 	if (ch == capitalization_once) {
-		*capitalization_on = true;
+		*capitalization_on = 1;
 		return -1;
 	} else if (ch == capitalization_lock) {
-		*capitalization_on_locked ^= true;
+		*capitalization_on_locked ^= 1;
 		return -1;
 	} else if (ch < 0) {
 		return ch;
 	}
 
 	if (*capitalization_on || *capitalization_on_locked) {
-		*capitalization_on = false;
+		*capitalization_on = 0;
 		switch (ch) {
 			case '"': return '\'';
 			case '(': return '<';

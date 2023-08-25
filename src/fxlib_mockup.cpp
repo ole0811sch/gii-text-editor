@@ -1,4 +1,5 @@
 #include "keybios.h"
+#include "dispbios.h"
 
 #include "editor.h"
 #include "util.h"
@@ -34,7 +35,29 @@ static unsigned int bytes_to_int(unsigned char bytes[]) {
 static void check_return_code(rfc_info_t info) {
 	int fcode = fgetc(stdin);
 	if (fcode != info.function_code) {
-		fprintf(stderr, "Invalid return function code");
+		fprintf(stderr, "Invalid return function code (%u, expected %u)", fcode,
+				info.function_code);
+		exit(EXIT_FAILURE);
+	}
+}
+
+static void flush() {
+	if (fflush(stdout) == EOF) {
+		perror("fflush");
+		exit(EXIT_FAILURE);
+	}
+}
+
+static void write_bytes(unsigned char out[], unsigned int n) {
+	for (size_t i = 0; i < n; ++i) {
+		if (fputc(out[i], stdout) == EOF) {
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
+static void write_byte(unsigned char out) {
+	if (fputc(out, stdout) == EOF) {
 		exit(EXIT_FAILURE);
 	}
 }
@@ -42,12 +65,8 @@ static void check_return_code(rfc_info_t info) {
 
 int GetKey(unsigned int *keycode) {
 	rfc_info_t info = GetKey_rfc;
-	if (fputc(info.function_code, stdout) == EOF)
-		exit(EXIT_FAILURE);
-	if (fflush(stdout) == EOF) {
-		perror("fflush");
-		exit(EXIT_FAILURE);
-	}
+	write_byte(info.function_code);
+	flush();
 	check_return_code(info);
 	unsigned char rets[8];
 	for (size_t i = 0; i < 8; ++i) {
@@ -71,18 +90,9 @@ void Bdisp_SetPoint_DDVRAM(
 	int_to_bytes((unsigned int) x, &out[1]);
 	int_to_bytes((unsigned int) y, &out[5]);
 	out[9] = point;
-	for (size_t i = 0; i < sizeof(out); ++i) {
-		if (fputc(out[i], stdout) == EOF) {
-			exit(EXIT_FAILURE);
-		}
-	}
-	if (fflush(stdout) == EOF) {
-		perror("fflush");
-		exit(EXIT_FAILURE);
-	}
+	write_bytes(out, sizeof(out));
+	flush();
 	check_return_code(info);
-	// fprintf(stderr, "x: %u %u %u %u\n", out[1], out[2], out[3], out[4]);
-	// fprintf(stderr, "y: %u %u %u %u\n", out[5], out[6], out[7], out[8]);
 }
 
 
@@ -97,33 +107,32 @@ void Print(
 	const unsigned char *str // pointer to string
 ) {
 	rfc_info_t info = Print_rfc;
-	if (fputc(info.function_code, stdout) == EOF)
-		exit(EXIT_FAILURE);
+	write_byte(info.function_code);
 	unsigned int arg_length = (unsigned int) strlen((const char*) str);
-	unsigned char length_bytes[5];
+	unsigned char length_bytes[4];
 	int_to_bytes(arg_length, length_bytes);
-	length_bytes[4] = '\0';
-	if (fputs((const char*) length_bytes, stdout) == EOF)
-		exit(EXIT_FAILURE);
-	if (fputs((const char*) str, stdout) == EOF)
-		exit(EXIT_FAILURE);
-	if (fflush(stdout) == EOF) {
-		perror("fflush");
-		exit(EXIT_FAILURE);
-	}
+	write_bytes(length_bytes, sizeof(length_bytes) / sizeof(length_bytes[0]);
+	write_bytes((unsigned char*) str, arg_length);
+	flush();
 	check_return_code(info);
 }
 
-void Bdisp_AllClr_DDVRAM(void) {
-	rfc_info_t info = Bdisp_AllClr_DDVRAM_rfc;
-	if (fputc(info.function_code, stdout) == EOF) {
-		exit(EXIT_FAILURE);
-	}
-	if (fflush(stdout) == EOF) {
-		perror("fflush");
-		exit(EXIT_FAILURE);
-	}
+void Bdisp_AreaClr_DDVRAM(const DISPBOX* pArea) {
+	rfc_info_t info = Bdisp_AreaClr_DDVRAM_rfc;
+	write_byte(info.function_code);
+	unsigned char buf[16];
+	int_to_bytes(pArea->left, buf);
+	int_to_bytes(pArea->top, buf + 4);
+	int_to_bytes(pArea->right, buf + 8);
+	int_to_bytes(pArea->bottom, buf + 12);
+	write_bytes(buf, 16);
+	flush();
 	check_return_code(info);
+}
+
+void Bdisp_AllClr_DDVRAM() {
+	const DISPBOX pArea = { 0, 0, 127, 63 };
+	Bdisp_AreaClr_DDVRAM(&pArea);
 }
 
 void PopUpWin(

@@ -8,9 +8,8 @@ import build.mockup_gui.*;
 public class Main {
 	private static int SCREEN_WIDTH;
 	private static int SCREEN_HEIGHT;
-	private static byte current_code;
 	private static final int[] keycode_seq = new int[]{ KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_EXE_,
+		/* KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_EXE_,
@@ -18,15 +17,17 @@ public class Main {
 		KeyBios.KEY_CHAR_SQUARE_,
 		KeyBios.KEY_CHAR_H_,
 		KeyBios.KEY_CHAR_E_,
-		KeyBios.KEY_CHAR_L_,
+		KeyBios.KEY_CHAR_L_, */
 		KeyBios.KEY_CHAR_L_,
 		KeyBios.KEY_CHAR_O_,
+		KeyBios.KEY_CTRL_F1_,
 		KeyBios.KEY_CHAR_SPACE_,
 		KeyBios.KEY_CHAR_W_,
 		KeyBios.KEY_CHAR_O_,
 		KeyBios.KEY_CHAR_R_,
 		KeyBios.KEY_CHAR_L_,
 		KeyBios.KEY_CHAR_D_,
+		KeyBios.KEY_CTRL_F2_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_DOWN_,
@@ -98,21 +99,34 @@ public class Main {
 
 		while (true) {
 			try {
+				// read function code
 				int code = System.in.read();
 				if (code == -1) {
 					throw new RuntimeException("EOF");
 				}
-				current_code = (byte) code;
+				byte current_code = (byte) code;
 				RFCSpec spec = RFC.map.get(code);
 				assert spec != null : "current_code == " + current_code;
+
+				// figure out length
 				int length;
-				if (spec.bytes_args == -1) // variable argument size
-					length = System.in.read();
+				if (spec.bytes_args == -1) { // variable argument size
+					byte[] length_bytes = new byte[4];
+					for (int i = 0; i < length_bytes.length; i++) {
+						int length_byte = System.in.read();
+						if (length_byte == -1)
+							throw new RuntimeException("EOF");
+						length_bytes[i] = (byte) length_byte;
+					}
+					length = bytesToInt(length_bytes, 0);
+				}
 				else
 					length = spec.bytes_args;
 				if (length == -1) {
 					throw new RuntimeException("EOF");
 				}
+
+				// read args
 				byte[] args = new byte[length];
 				for (int i = 0; i < args.length; ++i) {
 					int read = System.in.read();
@@ -121,10 +135,15 @@ public class Main {
 					}
 					args[i] = (byte) read;
 				}
+
+				// execute function
 				byte[] rets = spec.function.apply(args);
 				assert spec.bytes_return == -1 && rets.length > 0
 					|| spec.bytes_return != -1 
-					&& rets.length == spec.bytes_return + 1;
+					&& rets.length == spec.bytes_return;
+
+				// write function_code return and return values
+				System.out.write(current_code);
 				for (byte b : rets) {
 					System.out.write(b);
 				}
@@ -157,10 +176,9 @@ public class Main {
 			code = keycode_seq[seq_i++];
 		else
 			code = KeyBios.KEY_CHAR_A_;
-		byte[] retVal = new byte[9];
-		retVal[0] = current_code;
-		System.arraycopy(intToBytes(isChar), 0, retVal, 1, 4);
-		System.arraycopy(intToBytes(code), 0, retVal, 5, 4);
+		byte[] retVal = new byte[8];
+		System.arraycopy(intToBytes(isChar), 0, retVal, 0, 4);
+		System.arraycopy(intToBytes(code), 0, retVal, 4, 4);
 		String str = "[";
 		boolean isFirst = true;
 		for (byte b : retVal) {
@@ -178,25 +196,31 @@ public class Main {
 		int x = bytesToInt(args, 0);
 		int y = bytesToInt(args, 4);
 		GUI.getScreenPanel().setPx(x, y, args[8] != 0);
-		return new byte[]{current_code};
+		return new byte[0];
 	}
 
 	public static byte[] call_locate(byte[] args) {
-		return new byte[]{current_code};
+		return new byte[0];
 	}
 
 	public static byte[] call_Print(byte[] args) {
-		// for (byte b : args)
-		return new byte[]{current_code};
+		for (byte b : args)
+			System.err.write(b);
+		System.err.flush();
+		return new byte[0];
 	}
 
-	public static byte[] call_Bdisp_AllClr_DDVRAM(byte[] args) {
-		GUI.getScreenPanel().clear();
-		return new byte[]{current_code};
+	public static byte[] call_Bdisp_AreaClr_DDVRAM(byte[] args) {
+		int left = bytesToInt(args, 0);
+		int top = bytesToInt(args, 4);
+		int right = bytesToInt(args, 8);
+		int bottom = bytesToInt(args, 12);
+		GUI.getScreenPanel().clear(left, top, right, bottom);
+		return new byte[0];
 	}
 
 	public static byte[] call_PopUpWin(byte[] args) {
-		return new byte[]{current_code};
+		return new byte[0];
 	}
 
 	public static int getWidth() {

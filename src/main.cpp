@@ -11,6 +11,7 @@
 extern "C" {
 #endif
 #include "fxlib.h"
+#include "keybios.h"
 #ifdef __cplusplus
 }
 #endif
@@ -44,8 +45,6 @@ int AddIn_main(int isAppli, unsigned short OptionNum);
 
 jmp_buf error_jmp;
 static const char* str = "\
-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\
-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n\
 #include <stdio.h>\n\
 int main(void) {\n\
     printf(\"Hello World mmm\"); return 0;\n\
@@ -81,7 +80,21 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 	if (setjmp(error_jmp))
 		return 0;
 
-	initialize_editor(str);
+	unsigned int escape_keys_main[2] = { KEY_CTRL_F1, KEY_CTRL_F2 };
+	text_box_t box;
+	initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, 
+			CURSOR, 1, str, &box);
+	while (1) {
+		draw_text_box(&box);
+		unsigned int res = focus_text_box(&box, escape_keys_main, 
+				sizeof(escape_keys_main) / sizeof(escape_keys_main[0]));		
+		if (res == KEY_CTRL_F1) {
+			Print((unsigned char*) "F1");
+		}
+		else {
+			Print((unsigned char*) "F2");
+		}
+	}
 	return 1;
 }
 

@@ -1,9 +1,12 @@
-CC = clang
-CFLAGS = -I../mockup -D MOCKUP -x c -std=c99 -Wall -pedantic -Wno-unknown-pragmas -g
+CC = gcc
+CFLAGS = -I../mockup -D MOCKUP -x c -std=c99 -Wall -pedantic \
+		 -Wno-unknown-pragmas -g
 BLDDIR = Build
 OBJ = $(BLDDIR)/dyn_arrs.o $(BLDDIR)/editor.o $(BLDDIR)/font.o \
 	  $(BLDDIR)/fxlib_mockup.o $(BLDDIR)/main.o $(BLDDIR)/util.o \
-	  $(BLDDIR)/line.o
+	  $(BLDDIR)/line.o line_utils.o
+OBJ = $(addprefix $(BLDDIR)/, dyn_arrs.o editor.o font.o fxlib_mockup.o main.o \
+	  util.o line.o line_utils.o)
 
 .PHONY: all clean run build_dir
 
@@ -27,10 +30,14 @@ $(BLDDIR)/editor.o: editor.cpp editor.h | build_dir
 $(BLDDIR)/line.o: line.cpp line.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BLDDIR)/line_utils.o: line_utils.cpp line_utils.h line.h editor.h | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BLDDIR)/font.o: font.cpp font.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 	
-$(BLDDIR)/fxlib_mockup.o: fxlib_mockup.cpp ../mockup/fxlib.h ../mockup/rfc.h | build_dir
+$(BLDDIR)/fxlib_mockup.o: fxlib_mockup.cpp ../mockup/fxlib.h ../mockup/rfc.h \
+	| build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BLDDIR)/main.o: main.cpp | build_dir

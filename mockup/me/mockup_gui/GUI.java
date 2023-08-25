@@ -58,15 +58,15 @@ class ScreenPanel extends JPanel {
 		repaint(0, pixelSize * x, pixelSize * y, pixelSize, pixelSize);
 	}
 
-	public void clear() {
+	public void clear(int left, int top, int right, int bottom) {
 		synchronized (space) {
-			for (int x = 0; x < space.length; x++) {
-				for (int y = 0; y < space[x].length; y++) {
+			for (int x = left; x < space.length && x <= right; x++) {
+				for (int y = top; y < space[x].length && y <= bottom; y++) {
 					space[x][y] = false;
 				}
 			}
 		}
-		repaint(0, 0, 0, pixelSize * getWidth(), pixelSize * getHeight());
+		repaint(0, left * pixelSize, top * pixelSize, pixelSize * (right - left + 1), pixelSize * (bottom - top + 1));
 	}
 
 	@Override

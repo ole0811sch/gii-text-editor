@@ -1,6 +1,8 @@
 #ifndef FX_LIB_H_
 #define FX_LIB_H_
 
+#include "dispbios.h"
+
 #define INIT_ADDIN_APPLICATION(a, b) 0
 
 #ifdef __cplusplus
@@ -25,6 +27,7 @@ void Print(
 );
 
 void Bdisp_AllClr_DDVRAM(void);
+void Bdisp_AreaClr_DDVRAM(const DISPBOX* pArea);
 
 void PopUpWin(
 	int n // size of lines

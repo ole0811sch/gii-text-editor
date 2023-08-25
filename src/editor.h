@@ -22,21 +22,23 @@ extern "C" {
 #define CODE_LEFT -5
 #define CODE_RIGHT -6
 
-void initialize_editor(const char* content);
-
 /* boundaries (inclusive) of the text box of the editor as pixel coordinates */
 #define EDITOR_TOP 0
 #define EDITOR_LEFT 0
 #define EDITOR_BOTTOM 63
 #define EDITOR_RIGHT 127
 
-// both at least 1
+// both at least 1, in pixels
 #define MARGIN_TOP 1
 #define MARGIN_LEFT 1
 
 // height and width of one character in pixels
 #define CHAR_HEIGHT (sizeof(font[0]) / sizeof(font[0][0]))
 #define CHAR_WIDTH (sizeof(font[0][0]))
+
+// returns how many pixels n characters need to be displayed horizontally
+#define CHARW_TO_PX(n) (CHAR_WIDTH_OUTER * (n))
+#define CHARH_TO_PX(n) (CHAR_HEIGHT_OUTER * (n))
 
 #define CHAR_WIDTH_OUTER (CHAR_WIDTH + MARGIN_LEFT)
 #define CHAR_HEIGHT_OUTER (CHAR_HEIGHT + MARGIN_TOP)
@@ -69,6 +71,14 @@ typedef enum {
  * stores state and config of one text box
  */
 typedef struct {
+	/**
+	 * pixel x coordinate of the top left
+	 */
+	unsigned short left_px;
+	/**
+	 * pixel y coordinate of the top left
+	 */
+	unsigned short top_px;
 	/**
 	 * number of chars that fit in one vline
 	 */
@@ -126,5 +136,13 @@ typedef struct {
 		} editable_state;
 	} cursor;
 } text_box_t;
+
+void initialize_text_box(unsigned short left_px, unsigned short top_px,
+		unsigned short width, unsigned short height, 
+		interaction_mode_t interaction_mode, char editable, 
+		const char* content, text_box_t* box);
+void draw_text_box(text_box_t* box);
+unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
+		unsigned int count_escape_keys);
 
 #endif

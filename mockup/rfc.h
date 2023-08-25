@@ -21,13 +21,14 @@
  * Special cases:
  * RFC declarations:
  * int[2] GetKey(void)	// [0]: original return value, [1] key
+ * void Bdisp_AreaClr_DDVRAM(int left, int top, int right, int bottom)
  */
 #define RFCS \
 	X(GetKey, 0, 0, 8) \
 	X(Bdisp_SetPoint_DDVRAM, 1, 9, 0) \
 	X(locate, 2, 8, 0) \
 	X(Print, 3, -1, 0) \
-	X(Bdisp_AllClr_DDVRAM, 4, 0, 0) \
+	X(Bdisp_AreaClr_DDVRAM, 4, 16, 0) \
 	X(PopUpWin, 5, 4, 0)
 
 // X(function, function_code, bytes_args, bytes_return)

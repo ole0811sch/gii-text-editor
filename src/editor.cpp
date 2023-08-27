@@ -1,5 +1,6 @@
 #include "editor.h"
 #include "line_utils.h"
+#include "line.h"
 
 #include "dispbios.h"
 #include "util.h"
@@ -8,6 +9,14 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+
+/**
+ * Text boxes must always have at least one line.
+ *
+ * vline = view line. A regular line will not be split by a softbreak, but a
+ * line with n softbreaks will consist of n+1 vlines.
+ * vvline = visible view line
+ */
 
 
 // static function declarations
@@ -49,7 +58,6 @@ void initialize_text_box(unsigned short left_px, unsigned short top_px,
 		const char* content, text_box_t* box) {
 	*box = create_text_box(left_px, top_px, width, height, 
 			interaction_mode, editable, content);
-	initialize_lines(box, content);
 }
 
 void destruct_text_box(text_box_t* box) {
@@ -111,8 +119,8 @@ end_while:
 
 
 /**
- * creates text box. The first vvline is 0 and cursor_pos is (0, 0). If
- * interaction_mode isn't CURSOR, editable is ignored.
+ * creates text box. The first vvline is 0, cursor_pos is (0, 0) and there is
+ * one empty line. If interaction_mode isn't CURSOR, editable is ignored.
  */
 static text_box_t create_text_box(unsigned short left_px,
 		unsigned short top_px,
@@ -135,6 +143,9 @@ static text_box_t create_text_box(unsigned short left_px,
 	box.cursor.editable_state.capitalization_on = 0;
 	box.cursor.editable_state.capitalization_on_locked = 0;
 	initialize_lines(&box, text);
+	if (box.lines.count == 0) {
+		add_new_line(&box, 0);
+	}
 	return box;
 }
 
@@ -340,7 +351,7 @@ static void scroll_down(text_box_t* box) {
 }
 
 /**
- * expects box to be in cursor mode
+ * expects box to be in cursor mode. 
  */
 static void handle_cursor_move(text_box_t* box, int move) {
 	line_chi_t* cursor_pos = &box->cursor.position;

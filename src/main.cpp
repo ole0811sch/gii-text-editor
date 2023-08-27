@@ -17,6 +17,8 @@ extern "C" {
 #endif
 #include "editor.h"
 #include "util.h"
+#include "commands.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <setjmp.h>
@@ -90,13 +92,7 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 				sizeof(escape_keys_main) / sizeof(escape_keys_main[0]));		
 		locate(1, 1);
 		if (res == KEY_CTRL_F1) {
-			text_box_t help_box;
-			initialize_text_box(25, 24, EDITOR_COLUMNS - 10, EDITOR_LINES - 4, 
-					SCROLL, 0, "Help\n\n\n\n\n\n\n\n\n\nSikes!", 
-					&help_box);
-			draw_text_box(&help_box);
-			unsigned int escape_keys_help[1] = { KEY_CTRL_EXIT };
-			focus_text_box(&help_box, escape_keys_help, 1);
+			open_command_line(&box);
 		}
 		else {
 			Print((unsigned char*) "F2");

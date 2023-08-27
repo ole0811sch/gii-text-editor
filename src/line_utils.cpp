@@ -4,7 +4,6 @@
 #include <stdlib.h>
 
 static void remove_last_n_softbreaks(line_t* line, size_t target_count);
-static void add_new_line(text_box_t* box, size_t vline_begin);
 
 
 /**
@@ -98,9 +97,6 @@ void initialize_lines(text_box_t* box, const char* str) {
 	if(dyn_arr_line_create(10, 2, 1, &box->lines) == -1)
 		display_error("Out of memory");
 
-	if (*str == '\0')
-		return;
-	
 	dyn_arr_line_t* lines = &box->lines;
 	add_new_line(box, 0);
 	line_t* current_line = DYN_ARR_LAST(lines);
@@ -193,7 +189,7 @@ static void remove_last_n_softbreaks(line_t* line, size_t target_count) {
 /**
  * adds an empty line_t to box->lines
  */
-static void add_new_line(text_box_t* box, size_t vline_begin) {
+void add_new_line(text_box_t* box, size_t vline_begin) {
 	line_t new_line;
 	new_line.vline_begin = vline_begin;
 	new_line.count_softbreaks = 0;

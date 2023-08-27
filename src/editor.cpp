@@ -64,6 +64,7 @@ void destruct_text_box(text_box_t* box) {
 	for (size_t i = 0; i < box->lines.count; ++i) {
 		destruct_line(&box->lines.arr[i]);
 	}
+	dyn_arr_line_destroy(&box->lines);
 }
 
 void draw_text_box(text_box_t* box) {

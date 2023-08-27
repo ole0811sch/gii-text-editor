@@ -46,6 +46,20 @@ extern "C" {
 int AddIn_main(int isAppli, unsigned short OptionNum);
 
 jmp_buf error_jmp;
+static const char* help_str = "\
+Help: \n\
+\n\
+[Nothing to see yet]\n\
+1\n\
+2\n\
+3\n\
+4\n\
+5\n\
+6\n\
+7\n\
+8\n\
+9";
+
 static const char* str = "\
 #include <stdio.h>\n\
 int main(void) {\n\
@@ -90,12 +104,16 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 		draw_text_box(&box);
 		unsigned int res = focus_text_box(&box, escape_keys_main, 
 				sizeof(escape_keys_main) / sizeof(escape_keys_main[0]));		
-		locate(1, 1);
 		if (res == KEY_CTRL_F1) {
-			open_command_line(&box);
+			unsigned int escape_keys_help[1] = { KEY_CTRL_EXIT };
+			text_box_t help_box;
+			initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, SCROLL, 1, 
+					help_str, &help_box);
+			draw_text_box(&help_box);
+			focus_text_box(&help_box, escape_keys_help, 1);
 		}
 		else {
-			Print((unsigned char*) "F2");
+			open_command_line(&box);
 		}
 	}
 	return 1;

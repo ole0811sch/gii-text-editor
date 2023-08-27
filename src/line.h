@@ -38,6 +38,8 @@ typedef struct {
 	dyn_arr_char_t string;
 } line_t;
 
+void destruct_line(line_t* line);
+
 #undef DYN_ARR_H_
 #define DYN_ARR_CG_TYPE line_t
 #define DYN_ARR_CG_SUFFIX line

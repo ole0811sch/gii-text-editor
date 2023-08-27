@@ -111,7 +111,7 @@ void Print(
 	unsigned int arg_length = (unsigned int) strlen((const char*) str);
 	unsigned char length_bytes[4];
 	int_to_bytes(arg_length, length_bytes);
-	write_bytes(length_bytes, sizeof(length_bytes) / sizeof(length_bytes[0]);
+	write_bytes(length_bytes, sizeof(length_bytes) / sizeof(length_bytes[0]));
 	write_bytes((unsigned char*) str, arg_length);
 	flush();
 	check_return_code(info);
@@ -130,7 +130,7 @@ void Bdisp_AreaClr_DDVRAM(const DISPBOX* pArea) {
 	check_return_code(info);
 }
 
-void Bdisp_AllClr_DDVRAM() {
+void Bdisp_AllClr_DDVRAM(void) {
 	const DISPBOX pArea = { 0, 0, 127, 63 };
 	Bdisp_AreaClr_DDVRAM(&pArea);
 }

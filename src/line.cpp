@@ -7,3 +7,11 @@
 #undef DYN_ARR_CG_SUFFIX
 #undef DYN_ARR_CG_TYPE
 #undef DYN_ARR_IMPLEMENTATION
+
+void destruct_line(line_t* line) {
+	if (line->count_softbreaks > VLINE_INDEX_STATIC_ARR_SIZE) {
+		// free vline_index
+		dyn_arr_size_destroy(&line->vline_index.d_arr);
+	}
+	dyn_arr_char_destroy(&line->string);
+}

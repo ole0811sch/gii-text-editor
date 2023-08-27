@@ -6,7 +6,7 @@ OBJ = $(BLDDIR)/dyn_arrs.o $(BLDDIR)/editor.o $(BLDDIR)/font.o \
 	  $(BLDDIR)/fxlib_mockup.o $(BLDDIR)/main.o $(BLDDIR)/util.o \
 	  $(BLDDIR)/line.o line_utils.o
 OBJ = $(addprefix $(BLDDIR)/, dyn_arrs.o editor.o font.o fxlib_mockup.o main.o \
-	  util.o line.o line_utils.o)
+	  util.o line.o line_utils.o commands.o)
 
 .PHONY: all clean run build_dir
 
@@ -44,6 +44,9 @@ $(BLDDIR)/main.o: main.cpp | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BLDDIR)/util.o: util.cpp | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BLDDIR)/commands.o: commands.cpp commands.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build_dir: 

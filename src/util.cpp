@@ -4,7 +4,10 @@
 #include "main.h"
 #include "util.h"
 
+#ifdef DEBUG
 char dbg_buf[256];
+#endif
+char tmp_buf[256];
 
 
 void display_error(const char* msg) {

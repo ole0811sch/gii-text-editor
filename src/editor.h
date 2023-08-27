@@ -144,5 +144,7 @@ void initialize_text_box(unsigned short left_px, unsigned short top_px,
 void draw_text_box(text_box_t* box);
 unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
 		unsigned int count_escape_keys);
+size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size);
+void destruct_text_box(text_box_t* box);
 
 #endif

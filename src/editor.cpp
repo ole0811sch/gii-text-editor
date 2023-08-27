@@ -2,6 +2,7 @@
 #include "line_utils.h"
 
 #include "dispbios.h"
+#include "util.h"
 
 #include <stdio.h>
 #include <math.h>
@@ -10,9 +11,11 @@
 
 
 // static function declarations
-static void print_char_xy(unsigned char x, unsigned char y, char c, 
+static void print_char_xy(unsigned short offs_x, unsigned short offs_y, 
+unsigned char x, unsigned char y, char c, 
 		char negative);
-static void print_char(char_point_t point, char c, char negative);
+static void print_char(unsigned short offs_x, unsigned short offs_y, 
+char_point_t point, char c, char negative);
 static void print_lines(text_box_t* box);
 static int print_line(text_box_t* box, size_t line_i);
 static int print_partial_line(text_box_t* box, line_chi_t line_chi);
@@ -24,8 +27,8 @@ static void handle_char(text_box_t* box, char c);
 static void handle_cursor_move(text_box_t* box, int move);
 static void	handle_cursor_move_vertical(text_box_t* box, int move);
 static void move_cursor(text_box_t* box, int mode);
-static int maybe_scroll_down(text_box_t* box, size_t cursor_vline);
-static int maybe_scroll_up(text_box_t* box, size_t vline);
+static int auto_scroll_down(text_box_t* box, size_t cursor_vline);
+static int auto_scroll_up(text_box_t* box, size_t vline);
 static void update_changes_from(text_box_t* box, line_chi_t begin);
 static text_box_t create_text_box(unsigned short left_px,
 		unsigned short top_px,
@@ -34,6 +37,8 @@ static text_box_t create_text_box(unsigned short left_px,
 		interaction_mode_t interaction_mode, 
 		char editable,
 		const char* text);
+static void scroll_up(text_box_t* box);
+static void scroll_down(text_box_t* box);
 
 /**
  * initializes and start
@@ -47,14 +52,20 @@ void initialize_text_box(unsigned short left_px, unsigned short top_px,
 	initialize_lines(box, content);
 }
 
+void destruct_text_box(text_box_t* box) {
+	for (size_t i = 0; i < box->lines.count; ++i) {
+		destruct_line(&box->lines.arr[i]);
+	}
+}
+
 void draw_text_box(text_box_t* box) {
-	int left = box->left_px;
-	int top = box->top_px;
+	int left_px = box->left_px;
+	int top_px = box->top_px;
 	const DISPBOX area = { 
-		left, 
-		top, 
-		left + CHARW_TO_PX(box->width) - 1, 
-		top + CHARH_TO_PX(box->width) - 1 
+		left_px, 
+		top_px, 
+		left_px + CHARW_TO_PX(box->width) - 1, 
+		top_px + CHARH_TO_PX(box->height) - 1 
 	};
 	Bdisp_AreaClr_DDVRAM(&area);
 	print_lines(box);
@@ -75,10 +86,22 @@ unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[],
 			}
 		}
 		int c = key_code_to_ascii(box, key);
-		if (c >= 0)
+		if (c >= 0) {
 			handle_char(box, (char) c);
-		else if (c <= CODE_UP && c >= CODE_RIGHT)
-			handle_cursor_move(box, c);
+		}
+		else if (c <= CODE_UP && c >= CODE_RIGHT) {
+			if (box->interaction_mode == CURSOR) {
+				handle_cursor_move(box, c);
+			}
+			else { // SCROLL
+				if (c == CODE_UP) {
+					scroll_up(box);
+				}
+				else if (c == CODE_DOWN) {
+					scroll_down(box);
+				}
+			}
+		}
 	}
 end_while:
 	
@@ -252,6 +275,8 @@ static void move_cursor(text_box_t* box, int mode) {
 	point_t px;
 	if (!line_chi_to_point(box, box->cursor.position, &px))
 		return;
+	px.x += box->left_px;
+	px.y += box->top_px;
 
 	for (int y = -1; y < (int) CHAR_HEIGHT; ++y)
 		Bdisp_SetPoint_DDVRAM(px.x - 1, px.y + y, mode);
@@ -263,7 +288,7 @@ static void move_cursor(text_box_t* box, int mode) {
  *
  * returns whether it scrolled
  */
-static int maybe_scroll_up(text_box_t* box, size_t vline) {
+static int auto_scroll_up(text_box_t* box, size_t vline) {
 	if (vline < box->vvlines_begin) {
 		box->vvlines_begin = vline;
 		print_lines(box);
@@ -278,13 +303,40 @@ static int maybe_scroll_up(text_box_t* box, size_t vline) {
  *
  * returns whether it scrolled
  */
-static int maybe_scroll_down(text_box_t* box, size_t vline) {
+static int auto_scroll_down(text_box_t* box, size_t vline) {
 	if (vline >= box->vvlines_begin + box->height) {
 		box->vvlines_begin = vline - box->height + 1;
 		print_lines(box);
 		return 1;
 	}
 	return 0;
+}
+
+/**
+ * updates box and screen. If vvlines_begin is 0 already, nothing happens.
+ */
+static void scroll_up(text_box_t* box) {
+	if (box->vvlines_begin == 0) {
+		return;
+	}
+
+	--box->vvlines_begin;
+	print_lines(box);
+}
+
+/**
+ * updates box and screen. If vvlines_begin is 0 already, nothing happens.
+ */
+static void scroll_down(text_box_t* box) {
+	line_t* last_line = DYN_ARR_LAST(&box->lines);
+	size_t last_vline = last_line->vline_begin + last_line->count_softbreaks;
+	size_t last_vvline = box->vvlines_begin + box->height - 1;
+	if (last_vvline >= last_vline) {
+		return;
+	}
+
+	++box->vvlines_begin;
+	print_lines(box);
 }
 
 /**
@@ -299,7 +351,7 @@ static void handle_cursor_move(text_box_t* box, int move) {
 				--cursor_pos->char_i;
 				size_t vline = line_chi_to_vline(box, *cursor_pos, NULL);
 				box->cursor.cursor_x_target = 0;
-				maybe_scroll_up(box, vline);
+				auto_scroll_up(box, vline);
 			}
 			break;
 		case CODE_RIGHT:
@@ -308,7 +360,7 @@ static void handle_cursor_move(text_box_t* box, int move) {
 				++cursor_pos->char_i;
 				size_t vline = line_chi_to_vline(box, *cursor_pos, NULL);
 				box->cursor.cursor_x_target = 0;
-				maybe_scroll_down(box, vline);
+				auto_scroll_down(box, vline);
 			}
 			break;
 		default:
@@ -399,9 +451,9 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	cursor_pos->line = new_line_i;
 
 	if (move == CODE_UP)
-		maybe_scroll_up(box, new_line->vline_begin + new_vline_offs);
+		auto_scroll_up(box, new_line->vline_begin + new_vline_offs);
 	else 
-		maybe_scroll_down(box, new_line->vline_begin + new_vline_offs);
+		auto_scroll_down(box, new_line->vline_begin + new_vline_offs);
 }
 
 /**
@@ -609,14 +661,15 @@ static int print_partial_line(text_box_t* box, line_chi_t line_chi) {
 		char_i = line_chi.char_i;
 
 
-	
+	// print chars of each vline 
 	while (char_i < line->string.count && vline < vvlines_local_end) {
-		if (x >= EDITOR_COLUMNS) { // next vline
+		if (x >= box->width) { // next vline
 			x = 0;
 			++vline;
 			continue;
 		}
-		print_char_xy(x, vline - box->vvlines_begin, line->string.arr[char_i], 0);
+		print_char_xy(box->left_px, box->top_px, x, vline - box->vvlines_begin, 
+				line->string.arr[char_i], 0);
 		++char_i;
 		++x;
 	}
@@ -625,8 +678,9 @@ static int print_partial_line(text_box_t* box, line_chi_t line_chi) {
 		// line out of screen space
 		return 0;
 
-	while (x < EDITOR_COLUMNS) {
-		print_char_xy(x, vline - box->vvlines_begin, ' ', 0);
+	while (x < box->width) {
+		print_char_xy(box->left_px, box->top_px, x, vline - box->vvlines_begin, 
+				' ', 0);
 		++x;
 	}
 
@@ -650,11 +704,9 @@ static void print_chars(unsigned char x, unsigned char y, const char* str) {
 				break;
 			continue;
 		}
-		// if (cursor_pos.x == current_pos.x && cursor_pos.y == current_pos.y) {
-			// print_char(current_pos, str[i], 1);
-		// } 
-		// else 
-			print_char(current_pos, str[i], 0);
+
+
+		print_char(0, 0, current_pos, str[i], 0);
 		++current_pos.x;
 	}
 }
@@ -673,6 +725,11 @@ static int compare_lines_vline_begin(const void* vline_void,
 	return 0;
 }
 
+/**
+ * prints all lines in box and makes sure that beyond the end of the line there
+ * is only spaces. Does not clear cursor, or anything else between the
+ * characters
+ */
 static void print_lines(text_box_t* box) {
 	size_t first_line = dyn_arr_line_bsearch_cb(&box->lines, 
 			(void*) &box->vvlines_begin, &compare_lines_vline_begin);
@@ -683,16 +740,20 @@ static void print_lines(text_box_t* box) {
 
 
 static void 
-print_char_xy(unsigned char x, unsigned char y, char c, char negative) {
+print_char_xy(unsigned short offs_x, unsigned short offs_y, unsigned char x, 
+		unsigned char y, char c, char negative) {
 	char_point_t point = { x, y };
-	print_char(point, c, negative);
+	print_char(offs_x, offs_y, point, c, negative);
 }
 
 /**
  * if negative true, the colors will be inversed
  */
-static void print_char(char_point_t point, char c, char negative) {
+static void print_char(unsigned short offs_x, unsigned short offs_y, 
+		char_point_t point, char c, char negative) {
 	point_t px = char_point_to_point(point);
+	px.x += offs_x;
+	px.y += offs_y;
 	for (unsigned int y = 0; y < CHAR_HEIGHT; ++y) {
 		for (unsigned int x = 0; x < CHAR_WIDTH; ++x) {
 			Bdisp_SetPoint_DDVRAM(px.x + x, px.y + y, 
@@ -736,17 +797,17 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	line_t* last_line = DYN_ARR_LAST(lines);
 	size_t last_vline = last_line->count_softbreaks + last_line->vline_begin;
 	char scrolled = 1;
-	if (!maybe_scroll_down(box, new_vline)) {
+	if (!auto_scroll_down(box, new_vline)) {
 		if (last_vline >= box->height - 1) { 
 			// without this the last lines could be blank when deleting
-			if (!maybe_scroll_up(box, last_vline - (box->height - 1))) {
-				if (!maybe_scroll_up(box, new_vline)) {
+			if (!auto_scroll_up(box, last_vline - (box->height - 1))) {
+				if (!auto_scroll_up(box, new_vline)) {
 					scrolled = 0;
 				}
 			}
 		}
 		else {
-			if (!maybe_scroll_up(box, new_vline)) {
+			if (!auto_scroll_up(box, new_vline)) {
 				scrolled = 0;
 			}
 		}
@@ -767,4 +828,65 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 
 
 	move_cursor(box, 1);
+}
+
+/**
+ * This function tries to write the box's contents into buf. In
+ * any case buf will be null terminated.
+ * If the text of box (plus '\0') does not fit into buf, only the 
+ * first (buf_size - 1) bytes are written, the last byte is '\0'.
+ * The function returns how many bytes (excluding '\0') would have written 
+ * or have been written when all could be written. 
+ */
+size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
+	if (box->lines.count == 0) {
+		if (buf_size > 0) {
+			buf[0] = '\0';
+		}
+		return 0;
+	}
+
+	// iterate over all characters in all lines until either the buffer's or the
+	// lines end is reached
+	size_t buf_i = 0;
+	line_chi_t cl_pos = { 0, 0 };
+	line_t* current_line = &box->lines.arr[0];
+	for (;buf_i < buf_size - 1; ++buf_i) {
+		// increment cl_pos on linebreak
+		if (cl_pos.char_i == current_line->string.count) {
+			// reached end of box
+			if (cl_pos.line == box->lines.count - 1) {
+				break;
+			}
+			// continue with next line
+			cl_pos.char_i = 0;
+			++cl_pos.line;
+			buf[buf_i] = '\n';
+			current_line = &box->lines.arr[cl_pos.line];
+			continue;
+		}
+
+		buf[buf_i] = current_line->string.arr[cl_pos.char_i];
+
+		++cl_pos.char_i;
+	}
+
+	// could fit all bytes
+	// both when the condition of the for loop triggered and when we break,
+	// cl_pos must be after the last char of the last line (we don't set
+	// cl_pos.char_i to zero if the last line was reached). We also know that
+	// the third state in the for-header was executed one last time after the 
+	// last byte was written.
+	if (cl_pos.char_i >= current_line->string.count 
+			&& cl_pos.line == box->lines.count - 1) {
+		buf[buf_i] = '\0';
+		return buf_i;
+	}
+
+	buf[buf_size - 1] = '\0';
+	size_t sum_chars = box->lines.count - 1; // for the line breaks
+	for (size_t i = 0; i < box->lines.count; ++i) {
+		sum_chars += box->lines.arr[i].string.count;
+	}
+	return sum_chars;
 }

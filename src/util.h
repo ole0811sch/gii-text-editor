@@ -13,7 +13,6 @@ extern "C" {
 #define LEFT 0
 #define BOTTOM 63
 #define RIGHT 127
-
 #define EVAL(x) x
 
 #define DEBUG
@@ -42,6 +41,7 @@ extern "C" {
 	for (size_t i = 0; i < (times); ++i)\
 		GetKey(&(key));\
 } while(0)
+extern char dbg_buf[256];
 #else
 #define dbg_print(msg)
 #define dbg_print_xy(msg, x, y)
@@ -59,6 +59,6 @@ typedef struct {
 typedef point_t char_point_t;
 void display_error(const char* msg);
 
-extern char dbg_buf[256];
+extern char tmp_buf[256];
 
 #endif

@@ -246,34 +246,11 @@ static void display_cli_error(cli_result_t* result) {
 }
 
 /**
- * replaces the editor with a new text box with the contents of a specific file.
- * txt and slice represent the name of that file.
+ * Converts the path represented by txt and slice to a FONTCHARACTER array that
+ * can be used e.g. for Bfile_OpenFile. At the moment it always uses storage
+ * memory. The returned pointer should be freed.
  */
-static void edit_file(text_box_t* editor, const char* txt, 
-		index_slice_t slice) {
-	// TODO
-	destruct_text_box(editor);
-	initialize_text_box(editor->left_px, editor->top_px, editor->width,
-			editor->height, editor->interaction_mode, editor->cursor.editable, 
-			"Opened file", editor);
-#ifdef MOCKUP
-	fputs("Opened file: ", stderr);
-	for (int i = slice.begin; i < slice.end; ++i) {
-		fputc(txt[i], stderr);
-	}
-	fputc('\n', stderr);
-#endif
-}
-
-/**
- * writes the contents of editor to the file with the name represented by txt
- * and slice
- */
-static void write_file(text_box_t* editor, const char* txt, 
-		index_slice_t slice) {
-	int (*create_file)(const FONTCHARACTER*, int) = &Bfile_CreateFile;
-	int (*open_file)(const FONTCHARACTER*, int) = &Bfile_OpenFile;
-
+static FONTCHARACTER* get_path(const char* txt, index_slice_t slice) {
 	// cpy file name
 	size_t path_len = slice.end - slice.begin + 7; 	// + 7 for path
 	FONTCHARACTER* path = (FONTCHARACTER*) malloc((path_len + 1)
@@ -286,6 +263,91 @@ static void write_file(text_box_t* editor, const char* txt,
 	FONTCHARACTER pre[7] = { '\\', '\\', 'f', 'l', 's', '0', '\\' };
 	memcpy(path, pre, sizeof(pre));
 	path[path_len] = 0;
+	return path;
+}
+
+static void close_file(int file) {
+	int close_res = -1;
+	for (int i = 0; i < 10 && close_res < 0; ++i) {
+		close_res = Bfile_CloseFile(file);
+	}
+	if (close_res < 0) {
+		sprintf(tmp_buf, "Could not close to file (%d)", close_res);
+		display_error(tmp_buf);
+	}
+}
+
+/**
+ * replaces the editor with a new text box with the contents of a specific file.
+ * txt and slice represent the name of that file.
+ */
+static void edit_file(text_box_t* editor, const char* txt, 
+		index_slice_t slice) {
+	int (*open_file)(const FONTCHARACTER*, int) = &Bfile_OpenFile;
+	char* editor_contents = NULL;
+
+	FONTCHARACTER* path = get_path(txt, slice);
+	// open file
+	int f = open_file(path, _OPENMODE_READ);
+	if (f < 0) {
+		sprintf(tmp_buf, "Could not open file (%d)", f);
+		display_error(tmp_buf);
+		goto cleanup;
+	}
+
+	int f_size = Bfile_GetFileSize(f);
+	if (f_size < 0) {
+		sprintf(tmp_buf, "Could not get size of file (%d)", f_size);
+		display_error(tmp_buf);
+		close_file(f);
+		goto cleanup;
+	}
+
+	editor_contents = (char*) malloc(f_size + 1 * sizeof(char));
+	editor_contents[f_size / sizeof(char)] = '\0';
+	if (!editor_contents) display_fatal_error(MSG_ENOMEM);
+	int read_sum = 0;
+	while (read_sum < f_size) {
+		int read_res = Bfile_ReadFile(f, editor_contents, f_size - read_sum, 
+				read_sum);
+		if (read_res < 0) {
+			sprintf(tmp_buf, "Could not from file (%d)", read_res);
+			display_error(tmp_buf);
+			close_file(f);
+			goto cleanup;
+		}
+		read_sum += read_res;
+	}
+	close_file(f);
+
+	destruct_text_box(editor);
+	initialize_text_box(editor->left_px, editor->top_px, editor->width,
+			editor->height, editor->interaction_mode, editor->cursor.editable, 
+			editor_contents, editor);
+
+#ifdef MOCKUP
+	fputs("Opened file: ", stderr);
+	for (int i = slice.begin; i < slice.end; ++i) {
+		fputc(txt[i], stderr);
+	}
+	fputc('\n', stderr);
+#endif
+
+cleanup:
+	free(path);
+	free(editor_contents);
+}
+
+/**
+ * writes the contents of editor to the file with the name represented by txt
+ * and slice
+ */
+static void write_file(text_box_t* editor, const char* txt, 
+		index_slice_t slice) {
+	int (*create_file)(const FONTCHARACTER*, int) = &Bfile_CreateFile;
+	int (*open_file)(const FONTCHARACTER*, int) = &Bfile_OpenFile;
+
+	FONTCHARACTER* path = get_path(txt, slice);
 	// cpy editor content
 	size_t buf_len = 64;
 	char* editor_content = (char*) malloc(buf_len * sizeof(char));
@@ -320,6 +382,7 @@ static void write_file(text_box_t* editor, const char* txt,
 	if (f_size < 0) {
 		sprintf(tmp_buf, "Could not get size of file (%d)", f_size);
 		display_error(tmp_buf);
+		close_file(f);
 		goto cleanup;
 	}
 	if (f_size < editor_len + 1) {
@@ -332,7 +395,8 @@ static void write_file(text_box_t* editor, const char* txt,
 	if (write_res < 0) {
 		sprintf(tmp_buf, "Could not write to file (%d)", f_size);
 		display_error(tmp_buf);
-		goto cleanup_close;
+		close_file(f);
+		goto cleanup;
 	}
 
 #ifdef MOCKUP
@@ -346,15 +410,6 @@ static void write_file(text_box_t* editor, const char* txt,
 	fputs(editor_content, stderr);
 #endif
 
-	int close_res;
-cleanup_close:
-	for (int i = 0; i < 10 && close_res < 0; ++i) {
-		close_res = Bfile_CloseFile(f);
-	}
-	if (close_res < 0) {
-		sprintf(tmp_buf, "Could not close to file (%d)", close_res);
-		display_error(tmp_buf);
-	}
 cleanup:
 	free(path);
 	free(editor_content);

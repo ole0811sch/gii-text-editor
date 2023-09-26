@@ -239,8 +239,13 @@ int Bfile_OpenMainMemory(const unsigned char *name) {
 }
 
 int Bfile_ReadFile(int HANDLE, void *buf, int size, int readpos) {
+	if (!size) return 0;
+	for (int i = 0; i < size - 1; ++i) {
+		((char*) buf)[i] = '?';
+	}
+	((char*) buf)[size - 1] = '\0';
 	fputs("Function \"Bfile_ReadFile\" isn't implemented\n", stderr);
-	return 0;
+	return size;
 }
 
 int Bfile_WriteFile(int HANDLE, const void *buf, int size) {
@@ -265,7 +270,7 @@ int Bfile_GetMediaFree(enum DEVICE_TYPE devicetype, int *freebytes) {
 
 int Bfile_GetFileSize(int HANDLE) {
 	fputs("Function \"Bfile_GetFileSize\" isn't implemented\n", stderr);
-	return 0;
+	return 20;
 }
 
 int Bfile_CreateFile(const FONTCHARACTER *filename, int size) {

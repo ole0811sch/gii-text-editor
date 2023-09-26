@@ -1,0 +1,2 @@
+#!/bin/sh
+valgrind --leak-check=full src/Build/mockup.out mockup/Build/mockup_gui.jar

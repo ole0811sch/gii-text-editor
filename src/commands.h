@@ -5,4 +5,7 @@
 
 void open_command_line(text_box_t* editor);
 
+
+char test_parse_cli(void);
+
 #endif // SAVING_H_

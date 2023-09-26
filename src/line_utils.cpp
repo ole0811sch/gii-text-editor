@@ -95,7 +95,7 @@ size_t* add_softbreak_to_index(line_t* current_line, size_t i) {
  */
 void initialize_lines(text_box_t* box, const char* str) {
 	if(dyn_arr_line_create(10, 2, 1, &box->lines) == -1)
-		display_error("Out of memory");
+		display_fatal_error("Out of memory");
 
 	dyn_arr_line_t* lines = &box->lines;
 	add_new_line(box, 0);
@@ -196,5 +196,5 @@ void add_new_line(text_box_t* box, size_t vline_begin) {
 	dyn_arr_line_add(&box->lines, new_line);
 	dyn_arr_char_t* string = &DYN_ARR_LAST(&box->lines)->string;
 	if (dyn_arr_char_create(1, 2, 1, string) == -1)
-		display_error("Out of memory");
+		display_fatal_error("Out of memory");
 }

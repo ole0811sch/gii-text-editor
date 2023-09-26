@@ -57,6 +57,10 @@ typedef struct {
 
 // coordinates of a character in the character grid
 typedef point_t char_point_t;
+// variation on display_error that quit the entire application when the dialog
+// is closed
+void display_fatal_error(const char* msg);
+// can be exited with EXIT (function only returns then)
 void display_error(const char* msg);
 
 extern char tmp_buf[256];

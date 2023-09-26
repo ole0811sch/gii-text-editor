@@ -34,6 +34,9 @@ void display_error(const char* msg) {
 	}
 	unsigned int key;
 	while ((GetKey(&key), key != KEY_CTRL_EXIT));
-	longjmp(error_jmp, 1);
 }
 
+void display_fatal_error(const char* msg) {
+	display_error(msg);
+	longjmp(error_jmp, 1);
+}

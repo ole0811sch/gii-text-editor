@@ -49,9 +49,6 @@ static text_box_t create_text_box(unsigned short left_px,
 static void scroll_up(text_box_t* box);
 static void scroll_down(text_box_t* box);
 
-/**
- * initializes text box but doesn't draw it
- */
 void initialize_text_box(unsigned short left_px, unsigned short top_px,
 		unsigned short width, unsigned short height, 
 		interaction_mode_t interaction_mode, char editable, 
@@ -60,9 +57,6 @@ void initialize_text_box(unsigned short left_px, unsigned short top_px,
 			interaction_mode, editable, content);
 }
 
-/**
- * frees all resources associated with the text box
- */
 void destruct_text_box(text_box_t* box) {
 	for (size_t i = 0; i < box->lines.count; ++i) {
 		destruct_line(&box->lines.arr[i]);
@@ -70,10 +64,6 @@ void destruct_text_box(text_box_t* box) {
 	dyn_arr_line_destroy(&box->lines);
 }
 
-/**
- * clears area of the text box and then draws it
- * To begin interacting with it, also call focus_text_box
- */
 void draw_text_box(text_box_t* box) {
 	int left_px = box->left_px;
 	int top_px = box->top_px;
@@ -87,12 +77,6 @@ void draw_text_box(text_box_t* box) {
 	print_lines(box);
 }
 
-/**
- * Starts interaction with the box, i.e., up, left, bottom and top button
- * presses will move the cursor or the displayed section and other keys will
- * lead to text modification if enabled.
- * The text box should be drawn already
- */
 unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
 		unsigned int count_escape_keys) {
 	move_cursor(box, 1);
@@ -226,17 +210,17 @@ static void backspace(text_box_t* box) {
 			previous->string.count };
 		if (dyn_arr_char_add_all(&previous->string, 
 					line->string.arr, line->string.count) == -1)
-			display_fatal_error("Out of memory");
+			display_fatal_error(MSG_ENOMEM);
 		dyn_arr_char_destroy(&line->string);
 		if (dyn_arr_line_remove(lines, box->cursor.position.line) == -1)
-			display_fatal_error("Out of memory");
+			display_fatal_error(MSG_ENOMEM);
 		box->cursor.position = begin_change;
 		update_changes_from(box, begin_change);
 	}
 	else {
 		if (dyn_arr_char_remove(&line->string, box->cursor.position.char_i - 1) 
 				== -1)
-			display_fatal_error("Out of memory");
+			display_fatal_error(MSG_ENOMEM);
 		--box->cursor.position.char_i;
 
 		line_chi_t begin_change = { box->cursor.position.line, 
@@ -257,7 +241,7 @@ static void insert_char(text_box_t* box, char c) {
 
 	line_t* line = &box->lines.arr[cursor_pos->line];
 	if (dyn_arr_char_insert(&line->string, c, cursor_pos->char_i) == -1)
-		display_fatal_error("Out of memory");
+		display_fatal_error(MSG_ENOMEM);
 	++cursor_pos->char_i;
 
 	line_chi_t begin = { cursor_pos->line, cursor_pos->char_i - 1 };
@@ -855,14 +839,6 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	move_cursor(box, 1);
 }
 
-/**
- * This function tries to write the box's contents into buf. In
- * any case buf will be null terminated.
- * If the text of box (plus '\0') does not fit into buf, only the 
- * first (buf_size - 1) bytes are written, the last byte is '\0'.
- * The function returns how many bytes (excluding '\0') would have written 
- * or have been written when all could be written. 
- */
 size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
 	if (box->lines.count == 0) {
 		if (buf_size > 0) {

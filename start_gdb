@@ -1,0 +1,2 @@
+#!/bin/sh
+gdb --args src/Build/mockup.out mockup/Build/mockup_gui.jar

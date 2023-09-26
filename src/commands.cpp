@@ -1,12 +1,15 @@
 #include "commands.h"
 #include "editor.h"
-#include "fxlib.h"
-#include "keybios.h"
 #include "line.h"
 #include "util.h"
 
+#include "fxlib.h"
+#include "keybios.h"
+#include "filebios.h"
+
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 enum CLIResultType { ERROR, EDIT, WRITE };
 
@@ -268,18 +271,97 @@ static void edit_file(text_box_t* editor, const char* txt,
  */
 static void write_file(text_box_t* editor, const char* txt, 
 		index_slice_t slice) {
-	// TODO
+	int (*create_file)(const FONTCHARACTER*, int) = &Bfile_CreateFile;
+	int (*open_file)(const FONTCHARACTER*, int) = &Bfile_OpenFile;
+
+	// cpy file name
+	size_t path_len = slice.end - slice.begin + 7; 	// + 7 for path
+	FONTCHARACTER* path = (FONTCHARACTER*) malloc((path_len + 1)
+			* sizeof(FONTCHARACTER));
+	if (!path) display_fatal_error(MSG_ENOMEM);
+	for (size_t i = slice.begin; i < slice.end; ++i) {
+		path[7 + i - slice.begin] = txt[i];
+	}
+	// set path
+	FONTCHARACTER pre[7] = { '\\', '\\', 'f', 'l', 's', '0', '\\' };
+	memcpy(path, pre, sizeof(pre));
+	path[path_len] = 0;
+	// cpy editor content
+	size_t buf_len = 64;
+	char* editor_content = (char*) malloc(buf_len * sizeof(char));
+	if (!editor_content) display_fatal_error(MSG_ENOMEM);
+	size_t editor_len = get_text_box_string(editor, editor_content, buf_len);
+	if (editor_len + 1 > buf_len) {
+		char* realloc_res = (char*) realloc(editor_content,
+				(editor_len + 1) * sizeof(char));
+		if (!realloc_res) display_fatal_error(MSG_ENOMEM);
+		editor_content = realloc_res;
+		size_t len2 = get_text_box_string(editor, editor_content, editor_len + 1);
+		if (len2 != editor_len) 
+			display_error("Internal error in commands.cpp: write_file");
+	}
+
+	// try to create file
+	int create_res = create_file(path, editor_len + 1);
+	if (create_res < 0 && create_res != IML_FILEERR_ALREADYEXISTENTRY) {
+		sprintf(tmp_buf, "Could not create file (%d)", create_res);
+		display_error(tmp_buf);
+		goto cleanup;
+	}
+	// open file
+	int f = open_file(path, _OPENMODE_WRITE);
+	if (f < 0) {
+		sprintf(tmp_buf, "Could not open file (%d)", f);
+		display_error(tmp_buf);
+		goto cleanup;
+	}
+	// check that it's still large enough
+	int f_size = Bfile_GetFileSize(f);
+	if (f_size < 0) {
+		sprintf(tmp_buf, "Could not get size of file (%d)", f_size);
+		display_error(tmp_buf);
+		goto cleanup;
+	}
+	if (f_size < editor_len + 1) {
+		// TODO (delete and create new file but first check that 
+		// len(new) - len(old)B is still available)
+	}
+	// write
+	int write_res = Bfile_WriteFile(f, editor_content, (editor_len + 1) 
+			* sizeof(char));
+	if (write_res < 0) {
+		sprintf(tmp_buf, "Could not write to file (%d)", f_size);
+		display_error(tmp_buf);
+		goto cleanup_close;
+	}
+
 #ifdef MOCKUP
 	fputs("Write file: ", stderr);
 	for (int i = slice.begin; i < slice.end; ++i) {
 		fputc(txt[i], stderr);
 	}
 	fputc('\n', stderr);
+	fputs("Contents: ", stderr);
+	fputc('\n', stderr);
+	fputs(editor_content, stderr);
 #endif
+
+	int close_res;
+cleanup_close:
+	for (int i = 0; i < 10 && close_res < 0; ++i) {
+		close_res = Bfile_CloseFile(f);
+	}
+	if (close_res < 0) {
+		sprintf(tmp_buf, "Could not close to file (%d)", close_res);
+		display_error(tmp_buf);
+	}
+cleanup:
+	free(path);
+	free(editor_content);
 }
 
 
-
+#ifdef TEST_MODE 
 // tests
 #include "assert.h"
 
@@ -354,3 +436,4 @@ char test_parse_cli(void) {
 	return 1;
 #undef num_tests
 }
+#endif // TEST_MODE 

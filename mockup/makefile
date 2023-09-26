@@ -2,6 +2,8 @@ JC = javac
 BLDDIR = Build
 ROOTPKG = me
 JFLAGS = -Xdiags:verbose -d $(BLDDIR)/ --class-path $(ROOTPKG)/
+CFLAGS = -I../mockup/includeFX -I../mockup -D MOCKUP -x c -std=c99 -Wall \
+	-pedantic -Wno-unknown-pragmas -g
 
 .PHONY: all clean
 
@@ -27,8 +29,8 @@ $(BLDDIR)/mockup_gui/Main.class: $(ROOTPKG)/mockup_gui/Main.java
 
 $(ROOTPKG)/build/mockup_gui/RFC.java: $(ROOTPKG)/mockup_gui/rfc.hjava rfc.h
 	mkdir -p $(ROOTPKG)/build/mockup_gui/
-	cpp -P $< -o $@
+	cpp $(CFLAGS) -P $< -o $@
 
-$(ROOTPKG)/build/mockup_gui/KeyBios.java: $(ROOTPKG)/mockup_gui/keybios.hjava keybios.h
+$(ROOTPKG)/build/mockup_gui/KeyBios.java: $(ROOTPKG)/mockup_gui/keybios.hjava
 	mkdir -p $(ROOTPKG)/build/mockup_gui/
-	cpp -P $< -o $@
+	cpp $(CFLAGS) -P $< -o $@

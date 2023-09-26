@@ -19,6 +19,10 @@ extern "C" {
 #include "util.h"
 #include "commands.h"
 
+#ifdef MOCKUP
+#include "mockup.h"
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <setjmp.h>

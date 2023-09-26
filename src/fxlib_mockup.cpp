@@ -1,3 +1,4 @@
+#include "includeFX/filebios.h"
 #include "keybios.h"
 #include "dispbios.h"
 
@@ -226,3 +227,97 @@ void start_gui(const char* jar_path) {
 		exit(EXIT_FAILURE);
 	}
 }
+
+int Bfile_OpenFile(const FONTCHARACTER *filename, int mode) {
+	fputs("Function \"Bfile_OpenFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_OpenMainMemory(const unsigned char *name) {
+	fputs("Function \"Bfile_OpenMainMemory\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_ReadFile(int HANDLE, void *buf, int size, int readpos) {
+	fputs("Function \"Bfile_ReadFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_WriteFile(int HANDLE, const void *buf, int size) {
+	fputs("Function \"Bfile_WriteFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_SeekFile(int HANDLE, int pos) {
+	fputs("Function \"Bfile_SeekFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_CloseFile(int HANDLE) {
+	fputs("Function \"Bfile_CloseFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_GetMediaFree(enum DEVICE_TYPE devicetype, int *freebytes) {
+	fputs("Function \"Bfile_GetMediaFree\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_GetFileSize(int HANDLE) {
+	fputs("Function \"Bfile_GetFileSize\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_CreateFile(const FONTCHARACTER *filename, int size) {
+	fputs("Function \"Bfile_CreateFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_CreateDirectory(const FONTCHARACTER *pathname) {
+	fputs("Function \"Bfile_CreateDirectory\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_CreateMainMemory(const unsigned char *name) {
+	fputs("Function \"Bfile_CreateMainMemory\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_RenameMainMemory(const unsigned char *oldname, 
+		const unsigned char *newname) {
+	fputs("Function \"Bfile_RenameMainMemory\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_DeleteFile(const FONTCHARACTER *filename) {
+	fputs("Function \"Bfile_DeleteFile\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_DeleteDirectory(const FONTCHARACTER *pathname) {
+	fputs("Function \"Bfile_DeleteDirectory\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_DeleteMainMemory(const unsigned char *name) {
+	fputs("Function \"Bfile_DeleteMainMemory\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_FindFirst(const FONTCHARACTER *pathname, int *FindHandle, 
+		FONTCHARACTER *foundfile, FILE_INFO *fileinfo) {
+	fputs("Function \"Bfile_FindFirst\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_FindNext(int FindHandle, FONTCHARACTER *foundfile, 
+		FILE_INFO *fileinfo) {
+	fputs("Function \"Bfile_FindNext\" isn't implemented\n", stderr);
+	return 0;
+}
+
+int Bfile_FindClose(int FindHandle) {
+	fputs("Function \"Bfile_FindClose\" isn't implemented\n", stderr);
+	return 0;
+}
+

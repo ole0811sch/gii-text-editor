@@ -9,7 +9,6 @@ char dbg_buf[256];
 #endif
 char tmp_buf[256];
 
-
 void display_error(const char* msg) {
 	PopUpWin(6);
 	locate(2, 2);

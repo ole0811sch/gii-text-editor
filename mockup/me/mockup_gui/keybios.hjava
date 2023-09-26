@@ -1,4 +1,4 @@
-#include "../../keybios.h"
+#include "keybios.h"
 
 #define KEY_CODES \
 X(KEY_CHAR_0,          0x30) \

@@ -62,6 +62,7 @@ typedef point_t char_point_t;
 void display_fatal_error(const char* msg);
 // can be exited with EXIT (function only returns then)
 void display_error(const char* msg);
+static const char* MSG_ENOMEM = "Out of memory";
 
 extern char tmp_buf[256];
 

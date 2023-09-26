@@ -137,14 +137,38 @@ typedef struct {
 	} cursor;
 } text_box_t;
 
+/**
+ * initializes text box but doesn't draw it
+ */
 void initialize_text_box(unsigned short left_px, unsigned short top_px,
 		unsigned short width, unsigned short height, 
 		interaction_mode_t interaction_mode, char editable, 
 		const char* content, text_box_t* box);
+/**
+ * clears area of the text box and then draws it
+ * To begin interacting with it, also call focus_text_box
+ */
 void draw_text_box(text_box_t* box);
+/**
+ * Starts interaction with the box, i.e., up, left, bottom and top button
+ * presses will move the cursor or the displayed section and other keys will
+ * lead to text modification if enabled.
+ * The text box should be drawn already
+ */
 unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
 		unsigned int count_escape_keys);
+/**
+ * This function tries to write the box's contents into buf. In
+ * any case buf will be null terminated.
+ * If the text of box (plus '\0') does not fit into buf, only the 
+ * first (buf_size - 1) bytes are written, the last byte is '\0'.
+ * The function returns how many bytes (excluding '\0') would have written 
+ * or have been written when all could be written. 
+ */
 size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size);
+/**
+ * frees all resources associated with the text box
+ */
 void destruct_text_box(text_box_t* box);
 
 #endif

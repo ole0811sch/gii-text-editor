@@ -249,8 +249,10 @@ int Bfile_ReadFile(int HANDLE, void *buf, int size, int readpos) {
 }
 
 int Bfile_WriteFile(int HANDLE, const void *buf, int size) {
-	fputs("Function \"Bfile_WriteFile\" isn't implemented\n", stderr);
-	return 0;
+	if (size == 0) return 0;
+
+	fputc(*(char*) buf, stderr);
+	return 1;
 }
 
 int Bfile_SeekFile(int HANDLE, int pos) {

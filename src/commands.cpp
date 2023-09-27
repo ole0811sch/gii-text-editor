@@ -288,13 +288,14 @@ static void edit_file(text_box_t* editor, const char* txt,
 
 	FONTCHARACTER* path = get_path(txt, slice);
 	// open file
-	int f = open_file(path, _OPENMODE_READ);
+	int f = open_file(path, _OPENMODE_READ_SHARE);
 	if (f < 0) {
 		sprintf(tmp_buf, "Could not open file (%d)", f);
 		display_error(tmp_buf);
 		goto cleanup;
 	}
 
+	// get file size
 	int f_size = Bfile_GetFileSize(f);
 	if (f_size < 0) {
 		sprintf(tmp_buf, "Could not get size of file (%d)", f_size);
@@ -303,23 +304,26 @@ static void edit_file(text_box_t* editor, const char* txt,
 		goto cleanup;
 	}
 
-	editor_contents = (char*) malloc(f_size + 1 * sizeof(char));
-	editor_contents[f_size / sizeof(char)] = '\0';
+	// alloc buffer for file
+	editor_contents = (char*) malloc(f_size + 1);
+	editor_contents[f_size] = '\0';
 	if (!editor_contents) display_fatal_error(MSG_ENOMEM);
+	// read file
 	int read_sum = 0;
 	while (read_sum < f_size) {
-		int read_res = Bfile_ReadFile(f, editor_contents, f_size - read_sum, 
-				read_sum);
+		int read_res = Bfile_ReadFile(f, &editor_contents[read_sum], 
+				f_size - read_sum, read_sum);
 		if (read_res < 0) {
 			sprintf(tmp_buf, "Could not from file (%d)", read_res);
 			display_error(tmp_buf);
 			close_file(f);
 			goto cleanup;
 		}
-		read_sum += read_res;
+		read_sum += f_size;
 	}
 	close_file(f);
 
+	// update editor
 	destruct_text_box(editor);
 	initialize_text_box(editor->left_px, editor->top_px, editor->width,
 			editor->height, editor->interaction_mode, editor->cursor.editable, 
@@ -346,58 +350,79 @@ static void write_file(text_box_t* editor, const char* txt,
 		index_slice_t slice) {
 	int (*create_file)(const FONTCHARACTER*, int) = &Bfile_CreateFile;
 	int (*open_file)(const FONTCHARACTER*, int) = &Bfile_OpenFile;
+	int (*delete_file)(const FONTCHARACTER*) = &Bfile_DeleteFile;
 
 	FONTCHARACTER* path = get_path(txt, slice);
 	// cpy editor content
 	size_t buf_len = 64;
 	char* editor_content = (char*) malloc(buf_len * sizeof(char));
 	if (!editor_content) display_fatal_error(MSG_ENOMEM);
-	size_t editor_len = get_text_box_string(editor, editor_content, buf_len);
-	if (editor_len + 1 > buf_len) {
-		char* realloc_res = (char*) realloc(editor_content,
-				(editor_len + 1) * sizeof(char));
-		if (!realloc_res) display_fatal_error(MSG_ENOMEM);
-		editor_content = realloc_res;
-		size_t len2 = get_text_box_string(editor, editor_content, editor_len + 1);
-		if (len2 != editor_len) 
-			display_error("Internal error in commands.cpp: write_file");
+	size_t editor_len; // num of bytes in editor_content (including \0)
+	size_t num_editor_chars = get_text_box_string(editor, editor_content, buf_len) + 1;
+	editor_len = num_editor_chars + 1; // +1 for '\0'
+	if (editor_len > buf_len) {
+		// we need additional bytes for '\0' and possibly further chars from 
+		// the editor
+		editor_content = (char*) realloc(editor_content,
+				editor_len * sizeof(char));
+		if (!editor_content) display_fatal_error(MSG_ENOMEM);
+		if (num_editor_chars > buf_len) {
+			// not even all bytes from the editor have been 
+			// written to editor_content
+			get_text_box_string(editor, editor_content, editor_len);
+		}
 	}
+	editor_content[num_editor_chars] = '\0';
 
 	// try to create file
-	int create_res = create_file(path, editor_len + 1);
-	if (create_res < 0 && create_res != IML_FILEERR_ALREADYEXISTENTRY) {
-		sprintf(tmp_buf, "Could not create file (%d)", create_res);
-		display_error(tmp_buf);
-		goto cleanup;
+	int create_res = create_file(path, editor_len);
+	if (create_res < 0) {
+		if (create_res == IML_FILEERR_ALREADYEXISTENTRY) {
+			// we need to delete the old file. Changing bits is apparently not
+			// supported.
+			// TODO: safely delete (i.e., copy the file or at least check sizes
+			// beforehand)
+			int del_res = delete_file(path);
+			if (del_res < 0) {
+				sprintf(tmp_buf, "Could not delete file (%d)", del_res);
+				display_error(tmp_buf);
+				goto cleanup;
+			}
+			int create_res = create_file(path, editor_len);
+			if (create_res < 0) {
+				sprintf(tmp_buf, "Could not create file (%d)", create_res);
+				display_error(tmp_buf);
+				goto cleanup;
+			}
+		}
+		else {
+			sprintf(tmp_buf, "Could not create file (%d)", create_res);
+			display_error(tmp_buf);
+			goto cleanup;
+		}
 	}
+
 	// open file
-	int f = open_file(path, _OPENMODE_WRITE);
+	int f = open_file(path, _OPENMODE_READWRITE_SHARE);
 	if (f < 0) {
 		sprintf(tmp_buf, "Could not open file (%d)", f);
 		display_error(tmp_buf);
 		goto cleanup;
 	}
-	// check that it's still large enough
-	int f_size = Bfile_GetFileSize(f);
-	if (f_size < 0) {
-		sprintf(tmp_buf, "Could not get size of file (%d)", f_size);
-		display_error(tmp_buf);
-		close_file(f);
-		goto cleanup;
-	}
-	if (f_size < editor_len + 1) {
-		// TODO (delete and create new file but first check that 
-		// len(new) - len(old)B is still available)
-	}
 	// write
-	int write_res = Bfile_WriteFile(f, editor_content, (editor_len + 1) 
-			* sizeof(char));
-	if (write_res < 0) {
-		sprintf(tmp_buf, "Could not write to file (%d)", f_size);
-		display_error(tmp_buf);
-		close_file(f);
-		goto cleanup;
+	int bytes_written = 0;
+	while (bytes_written < editor_len) {
+		int write_res = Bfile_WriteFile(f, &editor_content[bytes_written], 
+				editor_len - bytes_written);
+		if (write_res < 0) {
+			sprintf(tmp_buf, "Could not write to file (%d)", write_res);
+			display_error(tmp_buf);
+			close_file(f);
+			goto cleanup;
+		}
+		bytes_written += write_res;
 	}
+	close_file(f);
 
 #ifdef MOCKUP
 	fputs("Write file: ", stderr);

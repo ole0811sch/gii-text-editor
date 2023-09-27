@@ -21,7 +21,7 @@
 
 // static function declarations
 static void print_char_xy(unsigned short offs_x, unsigned short offs_y, 
-unsigned char x, unsigned char y, char c, 
+		unsigned char x, unsigned char y, char c, 
 		char negative);
 static void print_char(unsigned short offs_x, unsigned short offs_y, 
 char_point_t point, char c, char negative);
@@ -760,6 +760,10 @@ print_char_xy(unsigned short offs_x, unsigned short offs_y, unsigned char x,
  */
 static void print_char(unsigned short offs_x, unsigned short offs_y, 
 		char_point_t point, char c, char negative) {
+	if (c >= 127 || c < ' ') {
+		c = '\0';
+		negative = 0;
+	}
 	point_t px = char_point_to_point(point);
 	px.x += offs_x;
 	px.y += offs_y;

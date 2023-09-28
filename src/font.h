@@ -2,6 +2,6 @@
 #define FONT_H_
 
 // array of bitmaps of the according ascii character
-extern const char font[][5][4];
+extern const char font[][5][3];
 
 #endif

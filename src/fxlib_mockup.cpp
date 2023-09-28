@@ -173,10 +173,10 @@ void start_gui(const char* jar_path) {
 			perror("close");
 		char buf_width[20];
 		char buf_height[20];
-		if (sprintf(buf_width, "%u", RIGHT - LEFT) >= sizeof(buf_width) 
-				/ sizeof(buf_width[0])
-				|| sprintf(buf_height, "%u", BOTTOM - TOP) >= sizeof(buf_height) 
-				/ sizeof(buf_height[0])) {
+		if (sprintf(buf_width, "%u", RIGHT - LEFT + 1) 
+				>= sizeof(buf_width) / sizeof(buf_width[0])
+				|| sprintf(buf_height, "%u", BOTTOM - TOP + 1) 
+				>= sizeof(buf_height) / sizeof(buf_height[0])) {
 			fprintf(stderr, "sprintf in start_gui");
 			exit(EXIT_FAILURE);
 		}

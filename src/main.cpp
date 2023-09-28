@@ -64,6 +64,8 @@ Help: \n\
 8\n\
 9";
 
+static const char* char_set = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL"
+	"MNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c";
 static const char* str = "\
 #include <stdio.h>\n\
 int main(void) {\n\
@@ -113,7 +115,7 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 	unsigned int escape_keys_main[2] = { KEY_CTRL_F1, KEY_CTRL_F2 };
 	text_box_t box;
 	initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, 
-			CURSOR, 1, "", &box);
+			CURSOR, 1, char_set, &box);
 	while (1) {
 		draw_text_box(&box);
 		unsigned int res = focus_text_box(&box, escape_keys_main, 

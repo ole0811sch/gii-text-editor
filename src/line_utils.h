@@ -10,7 +10,7 @@ ptrdiff_t recalculate_vline_index(text_box_t* box, line_t* line,
 size_t* add_softbreak_to_index(line_t* current_line, size_t i);
 void initialize_lines(text_box_t* box, const char* str);
 size_t line_chi_to_vline(text_box_t* box, line_chi_t line_chi, 
-		unsigned char* x);
+		unsigned char* x, char cursor_mode);
 void add_new_line(text_box_t* box, size_t vline_begin);
 
 #endif // LINE_UTILS_H_

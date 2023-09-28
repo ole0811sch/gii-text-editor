@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "fxlib.h"
 #include "line_utils.h"
 #include "line.h"
 
@@ -48,6 +49,7 @@ static text_box_t create_text_box(unsigned short left_px,
 		const char* text);
 static void scroll_up(text_box_t* box);
 static void scroll_down(text_box_t* box);
+static void clear_below_vline(const text_box_t* box, size_t vline);
 
 void initialize_text_box(unsigned short left_px, unsigned short top_px,
 		unsigned short width, unsigned short height, 
@@ -225,6 +227,9 @@ static void backspace(text_box_t* box) {
 
 		line_chi_t begin_change = { box->cursor.position.line, 
 			box->cursor.position.char_i };
+		if (begin_change.char_i > 0) {
+			--begin_change.char_i;
+		}
 		update_changes_from(box, begin_change);
 	}
 	box->cursor.cursor_x_target = 0;
@@ -281,6 +286,8 @@ static void move_cursor(text_box_t* box, int mode) {
 		return;
 	}
 
+	// if the cursor is after the last char of the line, 
+
 	point_t px;
 	if (!line_chi_to_point(box, box->cursor.position, &px))
 		return;
@@ -292,18 +299,46 @@ static void move_cursor(text_box_t* box, int mode) {
 }
 
 /**
+ * use auto_scroll_up instead.
+ *
  * if vline is before the first vvline, it adjusts vvlines so that 
  * vline is the first vvline
  *
  * returns whether it scrolled
  */
-static int auto_scroll_up(text_box_t* box, size_t vline) {
+static int auto_scroll_up_simple(text_box_t* box, size_t vline) {
 	if (vline < box->vvlines_begin) {
 		box->vvlines_begin = vline;
 		print_lines(box);
 		return 1;
 	}
 	return 0;
+}
+
+/**
+ * if vline is before the first vvline, it adjusts vvlines so that 
+ * vline is the first vvline. It also makes sure that there are as few as
+ * possible empty
+ * lines beyond vline.
+ *
+ * returns whether it scrolled
+ */
+static int auto_scroll_up(text_box_t* box, size_t vline) {
+	line_t* last_line = DYN_ARR_LAST(&box->lines);
+	size_t last_vvline = last_line->vline_begin 
+		+ last_line->count_softbreaks;
+	if (last_vvline < vline) {
+		last_vvline = vline;
+	}
+	// make sure there aren't any non-existing lines at the bottom
+	size_t scroll_target = 0;
+	if (last_vvline + 1 >= box->height) {
+		scroll_target = last_vvline + 1 - box->height;
+	}
+	char scrolled = 0;
+	scrolled |= auto_scroll_up_simple(box, scroll_target);
+	scrolled |= auto_scroll_up_simple(box, vline);
+	return scrolled;
 }
 
 /**
@@ -356,22 +391,41 @@ static void handle_cursor_move(text_box_t* box, int move) {
 	move_cursor(box, 0);
 	switch (move) {
 		case CODE_LEFT:
+		{
+			if (cursor_pos->char_i == 0 && cursor_pos->line == 0)
+				break;
+
 			if (cursor_pos->char_i > 0) {
 				--cursor_pos->char_i;
-				size_t vline = line_chi_to_vline(box, *cursor_pos, NULL);
-				box->cursor.cursor_x_target = 0;
-				auto_scroll_up(box, vline);
+			} else if (cursor_pos->line > 0) {
+				--cursor_pos->line;
+				cursor_pos->char_i = box->lines.arr[cursor_pos->line].string
+					.count;
 			}
+			size_t vline = line_chi_to_vline(box, *cursor_pos, NULL, 1);
+			box->cursor.cursor_x_target = 0;
+			auto_scroll_up(box, vline);
 			break;
+		}
 		case CODE_RIGHT:
-			if (cursor_pos->char_i < box->lines.arr[cursor_pos->line].string
-					.count) {
+		{
+			size_t old_line_len = box->lines.arr[cursor_pos->line].string 
+				.count;
+			if (cursor_pos->char_i == old_line_len
+					&& cursor_pos->line == box->lines.count - 1)
+				break;
+
+			if (cursor_pos->char_i < old_line_len) {
 				++cursor_pos->char_i;
-				size_t vline = line_chi_to_vline(box, *cursor_pos, NULL);
-				box->cursor.cursor_x_target = 0;
-				auto_scroll_down(box, vline);
+			} else if (cursor_pos->line < box->lines.count - 1) {
+				++cursor_pos->line;
+				cursor_pos->char_i = 0;
 			}
+			size_t vline = line_chi_to_vline(box, *cursor_pos, NULL, 1);
+			box->cursor.cursor_x_target = 0;
+			auto_scroll_down(box, vline);
 			break;
+		}
 		default:
 			handle_cursor_move_vertical(box, move);
 	}
@@ -407,24 +461,25 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 		}
 		else { // we stay in the same line
 			new_line_i = cursor_pos->line;
-			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x);
+			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x, 1);
 			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
 				- 1;
 		}
 	}
 	else { // down
 		if (vline_starts_old == NULL 
-				|| cursor_pos->char_i >= vline_starts_old[count_softbreaks - 1]) { 
+				|| cursor_pos->char_i 
+				>= vline_starts_old[count_softbreaks - 1]) { 
 			// last vline of line
 			if (cursor_pos->line == lines->count - 1)
 				return;
 			new_line_i = cursor_pos->line + 1;
 			new_vline_offs = 0;
-			line_chi_to_vline(box, *cursor_pos, &x);
+			line_chi_to_vline(box, *cursor_pos, &x, 1);
 		}
 		else { // we stay in the same line
 			new_line_i = cursor_pos->line;
-			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x);
+			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x, 1);
 			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
 				+ 1;
 		}
@@ -458,11 +513,12 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	}
 
 	cursor_pos->line = new_line_i;
+	size_t cursor_vline = line_chi_to_vline(box, *cursor_pos, NULL, 1);
 
 	if (move == CODE_UP)
-		auto_scroll_up(box, new_line->vline_begin + new_vline_offs);
+		auto_scroll_up(box, cursor_vline);
 	else 
-		auto_scroll_down(box, new_line->vline_begin + new_vline_offs);
+		auto_scroll_down(box, cursor_vline);
 }
 
 /**
@@ -608,7 +664,7 @@ static point_t char_point_to_point(char_point_t point) {
 static char line_chi_to_point(text_box_t* box, line_chi_t line_chi, 
 		point_t* point) {
 	unsigned char x;
-	size_t vline = line_chi_to_vline(box, line_chi, &x);
+	size_t vline = line_chi_to_vline(box, line_chi, &x, 1);
 	
 	if (vline < box->vvlines_begin || vline >= box->vvlines_begin + box->height)
 		return 0;
@@ -642,7 +698,7 @@ static int print_partial_line(text_box_t* box, line_chi_t line_chi) {
 	if (line_chi.line == lines->count - 1) { // line_chi.line is the last line 
 		vvlines_local_end = line->vline_begin + line->count_softbreaks + 1;
 	}
-	else
+	else // is this necessary ???
 		vvlines_local_end = lines->arr[line_chi.line + 1].vline_begin;
 
 	if (vvlines_local_end > box->vvlines_begin + box->height) 
@@ -653,7 +709,7 @@ static int print_partial_line(text_box_t* box, line_chi_t line_chi) {
 	// visible, the first that are.
 	size_t char_i; // index in the string
 	unsigned char x;
-	size_t vline = line_chi_to_vline(box, line_chi, &x); 
+	size_t vline = line_chi_to_vline(box, line_chi, &x, 1); 
 	if (vline < box->vvlines_begin) {
 		if (line->vline_begin + line->count_softbreaks < box->vvlines_begin)
 			// even last vline of line isn't visible, nothing to print
@@ -737,14 +793,22 @@ static int compare_lines_vline_begin(const void* vline_void,
 /**
  * prints all lines in box and makes sure that beyond the end of the line there
  * is only spaces. Does not clear cursor, or anything else between the
- * characters
+ * characters, except for the area after the last vline, which it clears.
  */
 static void print_lines(text_box_t* box) {
 	size_t first_line = dyn_arr_line_bsearch_cb(&box->lines, 
 			(void*) &box->vvlines_begin, &compare_lines_vline_begin);
+	char broke = 0;
 	for (size_t i = first_line; i < box->lines.count; ++i)
-		if (!print_line(box, i))
+		if (!print_line(box, i)) {
+			broke = 1;
 			break;
+		}
+	if (!broke) {
+		// potentially stopped printing before reaching end of screen
+		line_t* last = DYN_ARR_LAST(&box->lines);
+		clear_below_vline(box, last->vline_begin + last->count_softbreaks);
+	}
 }
 
 
@@ -786,13 +850,14 @@ static void print_char(unsigned short offs_x, unsigned short offs_y,
 static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	// find vline of begin
 	dyn_arr_line_t* lines = &box->lines;
-	size_t vline = line_chi_to_vline(box, begin, NULL);
+	size_t vline = line_chi_to_vline(box, begin, NULL, 0);
 	line_t* line = &lines->arr[begin.line];
 
 	// recalculate vline_index of line, starting from vline's successor
-	recalculate_vline_index(box, line, vline - line->vline_begin);
+	ptrdiff_t offset = recalculate_vline_index(box, line, vline - 
+		line->vline_begin);
 	// shift all subsequent vline_indices if necessary
-	char shifted = 0;
+	char shifted = offset != 0;
 	for (size_t line_i = begin.line + 1;
 			line_i < lines->count; 
 			++line_i) {
@@ -806,23 +871,17 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	}
 
 	// scroll if necessary
-	size_t new_vline = line_chi_to_vline(box, box->cursor.position, NULL);
+	size_t new_vline = line_chi_to_vline(box, box->cursor.position, NULL, 1);
 	line_t* last_line = DYN_ARR_LAST(lines);
 	size_t last_vline = last_line->count_softbreaks + last_line->vline_begin;
+	if (last_vline < new_vline) {
+		// the cursor can be after the last line
+		last_vline = new_vline;
+	}
 	char scrolled = 1;
 	if (!auto_scroll_down(box, new_vline)) {
-		if (last_vline >= box->height - 1) { 
-			// without this the last lines could be blank when deleting
-			if (!auto_scroll_up(box, last_vline - (box->height - 1))) {
-				if (!auto_scroll_up(box, new_vline)) {
-					scrolled = 0;
-				}
-			}
-		}
-		else {
-			if (!auto_scroll_up(box, new_vline)) {
-				scrolled = 0;
-			}
+		if (!auto_scroll_up(box, new_vline)) {
+			scrolled = 0;
 		}
 	}
 	if (!scrolled) {
@@ -837,10 +896,30 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 					break;
 			}
 		}
+		size_t new_last_vline = DYN_ARR_LAST(lines)->vline_begin 
+			+ DYN_ARR_LAST(lines)->count_softbreaks;
+		// in case there's still old stuff on the screen
+		clear_below_vline(box, new_last_vline);
 	}
 
-
 	move_cursor(box, 1);
+}
+
+/**
+ * clears the screen below vline
+ */
+void clear_below_vline(const text_box_t* box, size_t vline) {
+	DISPBOX area;
+	area.left = box->left_px;
+	area.right = box->left_px + box->width * CHAR_WIDTH_OUTER - 1;
+	area.bottom = box->top_px + box->height * CHAR_HEIGHT_OUTER - 1;
+	int vlines_to_spare = vline + 1 - box->vvlines_begin;
+	if (vlines_to_spare < 0)
+		vlines_to_spare = 0;
+	area.top = box->top_px + vlines_to_spare * CHAR_HEIGHT_OUTER;
+	if (area.bottom <= area.top || area.right <= area.left)
+		return;
+	Bdisp_AreaClr_DDVRAM(&area);
 }
 
 size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {

@@ -128,39 +128,46 @@ void initialize_lines(text_box_t* box, const char* str) {
 
 /**
  * if x isn't null, it is set to the char_point_t x value that line_chi
- * corresponds to. If char_i is greater than the index of the last char of the
- * line, the last vline of the line is returned, x will be greater than
- * EDITOR_COLUMNS.
+ * corresponds to. 
+ * If cursor_mode and if char_i is greater than the index of the last char of 
+ * the line, then if the last char of the line is already at the x coordinate,
+ * then the first vline of the next line is returned and x is set to 0. Else 
+ * the last vline of this line is returned and x will be set to be char_x + 1
+ * where char_x is the column of the last character. 
+ * If not cursor_mode, then the last vline of this line will be returned and x
+ * might be equal to EDITOR_COLUMNS.
  */
 size_t line_chi_to_vline(text_box_t* box, line_chi_t line_chi, 
-		unsigned char* x) {
+		unsigned char* x, char cursor_mode) {
 	line_t* line = &box->lines.arr[line_chi.line];
-	if (line->count_softbreaks == 0) {
-		// line is contained in one vline
-		if (x != NULL)
-			*x = line_chi.char_i;
-
-		return line->vline_begin;
-	}
-
+	unsigned char tentative_x;
+	size_t tentative_vline;
 
 	// find the correct array
 	size_t* vline_starts = get_vline_starts(line, NULL);
 
 	// check if the line_chi is in first vline of the line
-	if (line_chi.char_i < vline_starts[0]) {
-		if (x != NULL)
-			*x = line_chi.char_i;
-		return line->vline_begin;
+	if (line->count_softbreaks == 0 || line_chi.char_i < vline_starts[0]) {
+		tentative_x = line_chi.char_i;
+		tentative_vline = line->vline_begin;
+	} else {
+		size_t vline_index = dyn_arr_size_raw_bsearch(vline_starts, 
+				line->count_softbreaks, line_chi.char_i);
+
+		tentative_x = line_chi.char_i - vline_starts[vline_index];
+		tentative_vline = vline_index + 1 + line->vline_begin;
 	}
-
-	size_t vline_index = dyn_arr_size_raw_bsearch(vline_starts, 
-			line->count_softbreaks, line_chi.char_i);
-
-	if (x != NULL)
-		*x = line_chi.char_i - vline_starts[vline_index];
-
-	return vline_index + 1 + line->vline_begin;
+	if (cursor_mode && tentative_x >= EDITOR_COLUMNS) {
+		// use first char in next vline
+		if (x != NULL) {
+			*x = 0;
+		}
+		return tentative_vline + 1;
+	}
+	if (x != NULL) {
+		*x = tentative_x;
+	}
+	return tentative_vline;
 }
 
 /**

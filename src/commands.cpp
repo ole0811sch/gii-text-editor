@@ -46,7 +46,8 @@ typedef struct {
 
 static void initialize_command_line(text_box_t *editor,
 		text_box_t *command_line);
-static unsigned int start_and_draw_command_line(text_box_t *command_line);
+static unsigned int start_and_draw_command_line(text_box_t* command_line, 
+		text_box_t* editor);
 static char find_next_non_whitespace(size_t start_i, const char *str,
 		index_slice_t *next_non_ws);
 static cli_result_t parse_cli(const char* txt);
@@ -62,7 +63,7 @@ static void write_file(text_box_t* editor, const char* txt,
 void open_command_line(text_box_t *editor) {
 	text_box_t command_line;
 	initialize_command_line(editor, &command_line);
-	unsigned int esc_key = start_and_draw_command_line(&command_line);
+	unsigned int esc_key = start_and_draw_command_line(&command_line, editor);
 	if (esc_key != KEY_CTRL_EXE) {
 		destruct_text_box(&command_line);
 		return;
@@ -125,8 +126,12 @@ static void initialize_command_line(text_box_t *editor,
  * or KEY_CTRL_EXIT) is pressed, and returns that key. The caller can then
  * extract the string from command line
  */
-static unsigned int start_and_draw_command_line(text_box_t *command_line) {
+static unsigned int start_and_draw_command_line(text_box_t* command_line, 
+		text_box_t* editor) {
 	draw_text_box(command_line);
+	if (command_line->top_px >= editor->top_px + 3) {
+		draw_separator(command_line->top_px - 1);
+	}
 	unsigned int escape_keys[] = {KEY_CTRL_EXE, KEY_CTRL_EXIT};
 	return focus_text_box(command_line, escape_keys, 2);
 }
@@ -185,23 +190,11 @@ cli_result_t parse_cli(const char* txt) {
 		ret_val.content.error.type = NO_CMD;
 		return ret_val;
 	}
-	index_slice_t arg1;
-	if (!find_next_non_whitespace(cmd.end, txt, &arg1)) {
-		ret_val.type = ERROR;
-		ret_val.content.error.type = MISSING_ARGS;
-		return ret_val;
-	}
-	index_slice_t arg2;
-	if (find_next_non_whitespace(arg1.end, txt, &arg2)) {
-		ret_val.type = ERROR;
-		ret_val.content.error.type = TOO_MANY_ARGS;
-		return ret_val;
-	}
 
 	char matched = 0;
 	size_t cmd_i;
 	for (cmd_i = 0; cmd_i < cmds_len; ++cmd_i) {
-		for (size_t ch_i = cmd.begin; txt[ch_i]; ++ch_i) {
+		for (size_t ch_i = cmd.begin; ch_i == 0 || txt[ch_i - 1]; ++ch_i) {
 			if (ch_i == cmd.end) {
 				matched = 1;
 				goto break_outer;
@@ -215,6 +208,18 @@ break_outer:
 	if (!matched) {
 		ret_val.type = ERROR;
 		ret_val.content.error.type = INVALID_CMD;
+		return ret_val;
+	}
+	index_slice_t arg1;
+	if (!find_next_non_whitespace(cmd.end, txt, &arg1)) {
+		ret_val.type = ERROR;
+		ret_val.content.error.type = MISSING_ARGS;
+		return ret_val;
+	}
+	index_slice_t arg2;
+	if (find_next_non_whitespace(arg1.end, txt, &arg2)) {
+		ret_val.type = ERROR;
+		ret_val.content.error.type = TOO_MANY_ARGS;
 		return ret_val;
 	}
 
@@ -439,7 +444,6 @@ cleanup:
 	free(path);
 	free(editor_content);
 }
-
 
 #ifdef TEST_MODE 
 // tests

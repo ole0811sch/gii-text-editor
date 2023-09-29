@@ -64,6 +64,11 @@ typedef point_t char_point_t;
 void display_fatal_error(const char* msg);
 // can be exited with EXIT (function only returns then)
 void display_error(const char* msg);
+/**
+ * draws a 3px high separator horizontal line over the entire widht of the
+ * screen, with its last line having y = bottom_px
+ */
+void draw_separator(int bottom_px);
 
 extern char tmp_buf[256];
 

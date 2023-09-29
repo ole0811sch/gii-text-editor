@@ -917,7 +917,7 @@ void clear_below_vline(const text_box_t* box, size_t vline) {
 	if (vlines_to_spare < 0)
 		vlines_to_spare = 0;
 	area.top = box->top_px + vlines_to_spare * CHAR_HEIGHT_OUTER;
-	if (area.bottom <= area.top || area.right <= area.left)
+	if (area.bottom < area.top || area.right < area.left)
 		return;
 	Bdisp_AreaClr_DDVRAM(&area);
 }

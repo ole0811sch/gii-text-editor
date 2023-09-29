@@ -1,6 +1,14 @@
 #include <setjmp.h>
 #include <stddef.h>
 #include <keybios.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include "dispbios.h"
+#include "fxlib.h"
+#ifdef __cplusplus
+}
+#endif
 #include "main.h"
 #include "util.h"
 
@@ -33,9 +41,21 @@ void display_error(const char* msg) {
 	}
 	unsigned int key;
 	while ((GetKey(&key), key != KEY_CTRL_EXIT));
+	Bdisp_AllClr_DDVRAM();
 }
 
 void display_fatal_error(const char* msg) {
 	display_error(msg);
 	longjmp(error_jmp, 1);
+}
+
+void draw_separator(int bottom_px) {
+	DISPBOX line;
+	line.left = 0;
+	line.right = 127;
+	line.top = bottom_px - 2;
+	line.bottom = bottom_px;
+	Bdisp_AreaClr_VRAM(&line);
+	Bdisp_DrawLineVRAM(0, bottom_px - 1, 127, bottom_px - 1);
+	Bdisp_PutDispArea_DD(&line);
 }

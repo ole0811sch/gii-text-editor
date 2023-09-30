@@ -3,7 +3,7 @@ CFLAGS = -I../mockup/includeFX -I../mockup -D MOCKUP -x c -std=c99 -Wall -pedant
 		 -Wno-unknown-pragmas -g
 BLDDIR = Build
 OBJ = $(addprefix $(BLDDIR)/, dyn_arrs.o editor.o font.o fxlib_mockup.o main.o \
-	  util.o line.o line_utils.o commands.o)
+	  util.o line.o line_utils.o commands.o clipboard.o)
 
 .PHONY: all clean run build_dir test test_main
 
@@ -52,6 +52,9 @@ $(BLDDIR)/util.o: util.cpp | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BLDDIR)/commands.o: commands.cpp commands.h | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BLDDIR)/clipboard.o: clipboard.cpp clipboard.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build_dir: 

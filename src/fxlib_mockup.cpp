@@ -1,3 +1,4 @@
+#include "fxlib.h"
 #include "includeFX/filebios.h"
 #include "keybios.h"
 #include "dispbios.h"
@@ -11,6 +12,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+
+/**
+ * pixels on the screen: 0 = off (light), 1 = on (dark)
+ */
+char screen[64][128];
 
 typedef struct {
 	unsigned char function_code;
@@ -42,7 +48,7 @@ static void check_return_code(rfc_info_t info) {
 	}
 }
 
-static void flush() {
+static void flush(void) {
 	if (fflush(stdout) == EOF) {
 		perror("fflush");
 		exit(EXIT_FAILURE);
@@ -80,20 +86,25 @@ int GetKey(unsigned int *keycode) {
 	return (int) bytes_to_int(rets);
 }
 
+/**
+ * returns true iff the point is on screen. Otherwise it logs an error.
+ */
+static char check_point_on_screen(int x, int y) {
+	if (y >= ARR_LEN(screen) || x >= ARR_LEN(screen[0]) || y < 0 || x < 0) {
+		fprintf(stderr, "(%d, %d) is outside the screen space", x, y);
+		return 0;
+	}
+	return 1;
+}
+
 void Bdisp_SetPoint_DDVRAM(
 	int x, // x coordinate
 	int y, // y coordinate
 	unsigned char point // kind of dot
 ) {
-	rfc_info_t info = Bdisp_SetPoint_DDVRAM_rfc;
-	unsigned char out[10];
-	out[0] = info.function_code;
-	int_to_bytes((unsigned int) x, &out[1]);
-	int_to_bytes((unsigned int) y, &out[5]);
-	out[9] = point;
-	write_bytes(out, sizeof(out));
-	flush();
-	check_return_code(info);
+	if (!check_point_on_screen(x, y)) return;
+	screen[y][x] = point;
+	Bdisp_SetPoint_DD(x, y, point);
 }
 
 
@@ -119,16 +130,8 @@ void Print(
 }
 
 void Bdisp_AreaClr_DDVRAM(const DISPBOX* pArea) {
-	rfc_info_t info = Bdisp_AreaClr_DDVRAM_rfc;
-	write_byte(info.function_code);
-	unsigned char buf[16];
-	int_to_bytes(pArea->left, buf);
-	int_to_bytes(pArea->top, buf + 4);
-	int_to_bytes(pArea->right, buf + 8);
-	int_to_bytes(pArea->bottom, buf + 12);
-	write_bytes(buf, 16);
-	flush();
-	check_return_code(info);
+	Bdisp_AreaClr_VRAM(pArea);
+	Bdisp_AreaClr_DD(pArea);
 }
 
 void Bdisp_AllClr_DDVRAM(void) {
@@ -327,4 +330,188 @@ int Bfile_FindClose(int FindHandle) {
 	fputs("Function \"Bfile_FindClose\" isn't implemented\n", stderr);
 	return 0;
 }
+
+void Bdisp_AllClr_DD(void) {
+	DISPBOX a;
+	a.top = 0;
+	a.left = 0;
+	a.bottom = 63;
+	a.right = 127;
+	Bdisp_AreaClr_DD(&a);
+}
+
+void Bdisp_AllClr_VRAM(void) {
+	DISPBOX a;
+	a.top = 0;
+	a.left = 0;
+	a.bottom = 63;
+	a.right = 127;
+	Bdisp_AreaClr_VRAM(&a);
+}
+
+void Bdisp_AreaClr_DD(const DISPBOX *pArea) {
+	rfc_info_t info = Bdisp_AreaClr_DD_rfc;
+	write_byte(info.function_code);
+	unsigned char buf[16];
+	int_to_bytes(pArea->left, buf);
+	int_to_bytes(pArea->top, buf + 4);
+	int_to_bytes(pArea->right, buf + 8);
+	int_to_bytes(pArea->bottom, buf + 12);
+	write_bytes(buf, 16);
+	flush();
+	check_return_code(info);
+}
+
+void Bdisp_AreaClr_VRAM(const DISPBOX *pArea) {
+	if (!check_point_on_screen(pArea->left, pArea->top) 
+			|| !check_point_on_screen(pArea->right, pArea->bottom)) 
+		return;
+	for (size_t y = pArea->top; y <= pArea->bottom; ++y) {
+		for (size_t x = pArea->left; x <= pArea->right; ++x) {
+			screen[y][x] = 0;
+		}
+	}
+}
+
+void Bdisp_AreaReverseVRAM(int x1, int y1, int x2, int y2) {
+	fputs("Function \"Bdisp_AreaReverseVRAM\" isn't implemented\n", stderr);
+}
+
+void Bdisp_GetDisp_DD(unsigned char *pData) {
+	fputs("Function \"Bdisp_GetDisp_DD\" isn't implemented\n", stderr);
+}
+
+void Bdisp_GetDisp_VRAM(unsigned char *pData) {
+	fputs("Function \"Bdisp_GetDisp_VRAM\" isn't implemented\n", stderr);
+}
+
+void Bdisp_PutDisp_DD(void) {
+	DISPBOX a;
+	a.top = 0;
+	a.left = 0;
+	a.bottom = 63;
+	a.right = 127;
+	Bdisp_PutDispArea_DD(&a);
+}
+
+void Bdisp_PutDispArea_DD(const DISPBOX *pArea) {
+	if (!check_point_on_screen(pArea->left, pArea->top) 
+			|| !check_point_on_screen(pArea->right, pArea->bottom)) 
+		return;
+
+	// write function code
+	rfc_info_t info = Bdisp_PutDispArea_DD_rfc;
+	write_byte(info.function_code);
+
+	// write length
+	unsigned int width = pArea->right - pArea->left + 1;
+	unsigned int height = pArea->bottom - pArea->top + 1;
+	unsigned int bufx8 = width * height; // number of bits to transmit for screen area
+	unsigned int buf_len = bufx8 / 8;
+	if (bufx8 % 8) {
+		++buf_len;
+	}
+	unsigned char length_bytes[4];
+	int_to_bytes(buf_len + 16, length_bytes);
+	write_bytes(length_bytes, ARR_LEN(length_bytes));
+
+	// write area
+	unsigned char buf[16];
+	int_to_bytes(pArea->left, buf);
+	int_to_bytes(pArea->top, buf + 4);
+	int_to_bytes(pArea->right, buf + 8);
+	int_to_bytes(pArea->bottom, buf + 12);
+	write_bytes(buf, 16);
+
+	// write content
+	unsigned char buf2[buf_len];
+	size_t bit_i = 0;
+	for (size_t y = pArea->top; y <= pArea->bottom; ++y) {
+		for (size_t x = pArea->left; x <= pArea->right; ++bit_i, ++x) {
+			if (screen[y][x]) {
+				buf2[bit_i / 8] |= 1 << (7 - bit_i % 8);
+			} else {
+				buf2[bit_i / 8] &= ~(1 << (7 - bit_i % 8));
+			}
+		}
+	}
+	write_bytes(buf2, buf_len);
+
+	flush();
+	check_return_code(info);
+}
+
+void Bdisp_SetPoint_DD(int x, int y, unsigned char point) {
+	rfc_info_t info = Bdisp_SetPoint_DD_rfc;
+	unsigned char out[10];
+	out[0] = info.function_code;
+	int_to_bytes((unsigned int) x, &out[1]);
+	int_to_bytes((unsigned int) y, &out[5]);
+	out[9] = point;
+	write_bytes(out, sizeof(out));
+	flush();
+	check_return_code(info);
+}
+
+void Bdisp_SetPoint_VRAM(int x, int y, unsigned char point) {
+	if (!check_point_on_screen(x, y)) return;
+	screen[y][x] = point;
+}
+
+int  Bdisp_GetPoint_VRAM(int x, int y) {
+	fputs("Function \"Bdisp_GetPoint_VRAM\" isn't implemented\n", stderr);
+	return 0;
+}
+
+void Bdisp_WriteGraph_DD(const DISPGRAPH *WriteGraph) {
+	fputs("Function \"Bdisp_WriteGraph_DD\" isn't implemented\n", stderr);
+}
+
+void Bdisp_WriteGraph_VRAM(const DISPGRAPH *WriteGraph) {
+	fputs("Function \"Bdisp_WriteGraph_VRAM\" isn't implemented\n", stderr);
+}
+
+void Bdisp_WriteGraph_DDVRAM(const DISPGRAPH *WriteGraph) {
+	fputs("Function \"Bdisp_WriteGraph_DDVRAM\" isn't implemented\n", stderr);
+}
+
+void Bdisp_ReadArea_DD(const DISPBOX *ReadArea, unsigned char *ReadData) {
+	fputs("Function \"Bdisp_ReadArea_DD\" isn't implemented\n", stderr);
+}
+
+void Bdisp_ReadArea_VRAM(const DISPBOX *ReadArea, unsigned char *ReadData) {
+	fputs("Function \"Bdisp_ReadArea_VRAM\" isn't implemented\n", stderr);
+}
+
+void Bdisp_DrawLineVRAM(int x1, int y1, int x2, int y2) {
+	if(!check_point_on_screen(x1, y1) || !check_point_on_screen(x2, y2))
+		return;
+
+	if (x1 == x2) {
+		int y_min, y_max;
+		if (y1 > y2)
+			y_min = y2, y_max = y1;
+		else
+			y_min = y1, y_max = y2;
+		for (int y = y_min; y <= y_max; ++y) {
+			screen[y][x1] = 1;
+		}
+	} else if (y1 == y2) {
+		int x_min, x_max;
+		if (x1 > x2)
+			x_min = x2, x_max = x1;
+		else
+			x_min = x1, x_max = x2;
+		for (int x = x_min; x <= x_max; ++x) {
+			screen[y1][x] = 1;
+		}
+	} else
+		fputs("Function \"Bdisp_DrawLineVRAM\" isn't implemented for "
+				"non-orthogonal lines\n", stderr);
+}
+
+void Bdisp_ClearLineVRAM(int x1, int y1, int x2, int y2) {
+	fputs("Function \"Bdisp_ClearLineVRAM\" isn't implemented\n", stderr);
+}
+
 

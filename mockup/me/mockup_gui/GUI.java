@@ -35,7 +35,6 @@ public class GUI {
 class ScreenPanel extends JPanel {
 	boolean[][] space;
 	int pixelSize = 8;
-	private Consumer<Graphics> painter;
 
 	public ScreenPanel() {
 		space = new boolean[Main.getWidth()][Main.getHeight()];
@@ -48,11 +47,36 @@ class ScreenPanel extends JPanel {
 				pixelSize * Main.getHeight());
 	}
 
-	public void setPx(int x, int y, boolean on) {
+	/**
+	 * sets area to the pixels in px. Each bit in px is one point; they're
+	 * enumerated line-wise from left to right, top to bottom, starting with the
+	 * MSB in the first byte.
+	 */
+	public void setArea(int left, int top, int right, int bottom, byte[] px) {
+		if (left < 0 || top < 0 || right < 0 || bottom < 0 
+				|| space.length <= left || space[left].length <= top
+				|| space.length <= right || space[right].length <= bottom)
+			System.err.printf("Area (l:%d t:%d r:%d b:%d) is not entirely in "
+					+ "screen\n", left, top, right, bottom);
 		synchronized (space) {
-			if (space.length <= x || space[x].length <= y)
-				return;
+			int bit_i = 0;
+			for (int y = top; y <= bottom; ++y) {
+				for (int x = left; x <= right; ++x) {
+					space[x][y] = (px[bit_i / 8] & (1 << (7 - bit_i % 8))) != 0;
+					++bit_i;
+				}
+			}
+		}
+		repaint(0, left * pixelSize, top * pixelSize, pixelSize 
+				* (right - left + 1), pixelSize * (bottom - top + 1));
+	}
 
+	public void setPx(int x, int y, boolean on) {
+		if (space.length <= x || space[x].length <= y) {
+			System.err.printf("Point (%d, %d) isn't on screen", x, y);
+			return;
+		}
+		synchronized (space) {
 			space[x][y] = on;
 		}
 		repaint(0, pixelSize * x, pixelSize * y, pixelSize, pixelSize);
@@ -66,7 +90,8 @@ class ScreenPanel extends JPanel {
 				}
 			}
 		}
-		repaint(0, left * pixelSize, top * pixelSize, pixelSize * (right - left + 1), pixelSize * (bottom - top + 1));
+		repaint(0, left * pixelSize, top * pixelSize, pixelSize 
+				* (right - left + 1), pixelSize * (bottom - top + 1));
 	}
 
 	@Override

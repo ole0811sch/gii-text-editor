@@ -120,6 +120,17 @@ typedef struct {
 		 */
 		unsigned char cursor_x_target;
 		/**
+		 * true iff in visual (selection) mode
+		 */
+		char visual_mode;
+		/**
+		 * defines the range of the selection together with position. The
+		 * smaller of the two is the begin (index of the first character) and
+		 * the other is the end (exclusive). The selection can also be empty
+		 * (when they are identical).
+		 */
+		line_chi_t selection_begin;
+		/**
 		 * stores whether the text box can be edited
 		 */
 		char editable;

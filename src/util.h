@@ -16,6 +16,7 @@ extern "C" {
 #define BOTTOM 63
 #define RIGHT 127
 #define EVAL(x) x
+#define ARR_LEN(arr) (sizeof(arr)/sizeof((arr)[0]))
 
 #define DEBUG
 

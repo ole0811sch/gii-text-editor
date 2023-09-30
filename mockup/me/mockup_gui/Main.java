@@ -9,7 +9,10 @@ public class Main {
 	private static int SCREEN_WIDTH;
 	private static int SCREEN_HEIGHT;
 	private static final int[] keycode_seq = new int[]{ 
-		KeyBios.KEY_CTRL_EXE_,
+		KeyBios.KEY_CTRL_F2_,
+		KeyBios.KEY_CHAR_E_,
+		KeyBios.KEY_CHAR_SPACE_,
+		KeyBios.KEY_CHAR_E_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
@@ -31,6 +34,25 @@ public class Main {
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_UP_,
 		KeyBios.KEY_CTRL_UP_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_DOWN_,
 	};
@@ -149,8 +171,9 @@ public class Main {
 	}
 
 	private static int bytesToInt(byte[] bytes, int offs) {
-		return bytes[offs] + (bytes[offs + 1] << 8) + (bytes[offs + 2] << 16) 
-			+ (bytes[offs + 3] << 24);
+		return (0xFF & bytes[offs]) | (0xFF & bytes[offs + 1]) << 8 
+			| (0xFF & bytes[offs + 2]) << 16 
+			| (0xFF & bytes[offs + 3]) << 24;
 	}
 
 	public static byte[] call_GetKey(byte[] args) {
@@ -167,20 +190,10 @@ public class Main {
 		byte[] retVal = new byte[8];
 		System.arraycopy(intToBytes(isChar), 0, retVal, 0, 4);
 		System.arraycopy(intToBytes(code), 0, retVal, 4, 4);
-		String str = "[";
-		boolean isFirst = true;
-		for (byte b : retVal) {
-			if (isFirst)
-				isFirst = false;
-			else
-				str += "][";
-			str += b;
-		}
-		str += "]";
 		return retVal;
 	}
 
-	public static byte[] call_Bdisp_SetPoint_DDVRAM(byte[] args) {
+	public static byte[] call_Bdisp_SetPoint_DD(byte[] args) {
 		int x = bytesToInt(args, 0);
 		int y = bytesToInt(args, 4);
 		GUI.getScreenPanel().setPx(x, y, args[8] != 0);
@@ -198,12 +211,22 @@ public class Main {
 		return new byte[0];
 	}
 
-	public static byte[] call_Bdisp_AreaClr_DDVRAM(byte[] args) {
+	public static byte[] call_Bdisp_AreaClr_DD(byte[] args) {
 		int left = bytesToInt(args, 0);
 		int top = bytesToInt(args, 4);
 		int right = bytesToInt(args, 8);
 		int bottom = bytesToInt(args, 12);
 		GUI.getScreenPanel().clear(left, top, right, bottom);
+		return new byte[0];
+	}
+
+	public static byte[] call_Bdisp_PutDispArea_DD(byte[] args) {
+		int left = bytesToInt(args, 0);
+		int top = bytesToInt(args, 4);
+		int right = bytesToInt(args, 8);
+		int bottom = bytesToInt(args, 12);
+		byte[] px = Arrays.copyOfRange(args, 16, args.length);
+		GUI.getScreenPanel().setArea(left, top, right, bottom, px);
 		return new byte[0];
 	}
 

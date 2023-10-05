@@ -19,7 +19,6 @@
  * vvline = visible view line
  */
 
-
 // static function declarations
 static void print_char_xy(unsigned short offs_x, unsigned short offs_y, 
 		unsigned char x, unsigned char y, char c, 
@@ -28,10 +27,15 @@ static void print_char(unsigned short offs_x, unsigned short offs_y,
 char_point_t point, char c, char negative, char dd);
 static void print_lines(text_box_t* box, char dd);
 static int print_line(text_box_t* box, size_t line_i, char dd);
-static int print_partial_line(text_box_t* box, line_chi_t line_chi, char dd);
+static int print_partial_line(const text_box_t* box, line_chi_t line_chi, 
+		char dd);
 static void print_chars(unsigned char x, unsigned char y, const char* str);
+static void print_cursor_at(text_box_t* box, char_point_t point, int mode, 
+		char dd);
 static char line_chi_to_point(text_box_t* box, line_chi_t line_chi, 
 		point_t* point);
+static char line_chi_to_char_point(text_box_t* box, line_chi_t line_chi, 
+		char_point_t* point);
 static int key_code_to_ascii(text_box_t* box, unsigned int code);
 static void handle_char(text_box_t* box, char c);
 static void handle_cursor_move(text_box_t* box, int move);
@@ -50,6 +54,78 @@ static text_box_t create_text_box(unsigned short left_px,
 static void scroll_up(text_box_t* box, char dd);
 static void scroll_down(text_box_t* box, char dd);
 static void clear_below_vline(const text_box_t* box, size_t vline, char dd);
+static void redraw_changes(text_box_t* box);
+static void get_full_area(text_box_t* box, DISPBOX* area);
+static int line_chi_greater_than(line_chi_t a, line_chi_t b);
+
+static void get_full_area(text_box_t* box, DISPBOX* area) {
+	DISPBOX temp = {
+		box->left_px, 
+		box->top_px, 
+		box->left_px + CHARW_TO_PX(box->width) - 1, 
+		box->top_px + CHARH_TO_PX(box->height) - 1 
+	};
+	*area = temp;
+}
+
+static int line_chi_greater_than(line_chi_t a, line_chi_t b) {
+	return a.line > b.line || (a.line == b.line && a.char_i > b.char_i);
+}
+
+/**
+ * sets box->redraw_areas to a state that states that nothing needs to be
+ * redrawn
+ */
+static void clear_changes(text_box_t* box) {
+	redraw_areas_t* ras = &box->redraw_areas;
+	line_chi_to_char_point(box, box->cursor.position, &ras->old_cursor);
+	ras->vvlines_begin_changed = 0;
+	ras->changes_begin.line = 0;
+	ras->changes_begin.char_i = 0;
+	ras->changes_end = ras->changes_begin;
+}
+
+static void redraw_changes(text_box_t* box) {
+	redraw_areas_t* ras = &box->redraw_areas;
+	DISPBOX a;
+	if (ras->vvlines_begin_changed) {
+		get_full_area(box, &a);
+		Bdisp_AreaClr_VRAM(&a);
+		draw_text_box(box);
+		Bdisp_PutDispArea_DD(&a);
+		clear_changes(box);
+		return;
+	}
+
+	if (box->interaction_mode == CURSOR) {
+		print_cursor_at(box, ras->old_cursor, 0, 1);
+	}
+	if (line_chi_greater_than(ras->changes_end, ras->changes_begin)) {
+		print_partial_line(box, ras->changes_begin, 0);
+		for (size_t line_i = ras->changes_begin.line + 1;
+				line_i < ras->changes_end.line; 
+				++line_i) {
+			if (!print_line(box, line_i, 0))
+				// line_i was (partially) below visible area
+				break;
+		}
+		size_t new_last_vline = DYN_ARR_LAST(&box->lines)->vline_begin 
+			+ DYN_ARR_LAST(&box->lines)->count_softbreaks;
+		// in case there's still old stuff on the screen
+		clear_below_vline(box, new_last_vline, 0);
+		point_t begin;
+		line_chi_to_point(box, ras->changes_begin, &begin);
+		a.top = begin.y;
+		a.left = begin.x;
+		a.right = box->left_px + CHARW_TO_PX(box->width) - 1;
+		a.bottom = box->top_px + CHARH_TO_PX(box->height) - 1;
+		Bdisp_PutDispArea_DD(&a);
+	}
+	if (box->interaction_mode == CURSOR) {
+		move_cursor(box, 1, 1);
+	}
+	clear_changes(box);
+}
 
 void initialize_text_box(unsigned short left_px, unsigned short top_px,
 		unsigned short width, unsigned short height, 
@@ -68,16 +144,17 @@ void destruct_text_box(text_box_t* box) {
 
 void draw_text_box(text_box_t* box) {
 	print_lines(box, 1);
+	if (box->interaction_mode == CURSOR) {
+		move_cursor(box, 1, 0);
+	}
 }
 
 unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
 		unsigned int count_escape_keys) {
-	move_cursor(box, 1, 0);
-
 	unsigned int ret_val;
 	while (1) {
 		unsigned int key;
-		Bdisp_PutDisp_DD();
+		redraw_changes(box);
 		GetKey(&key);
 		for (unsigned int i = 0; i < count_escape_keys; ++i) {
 			if (escape_keys[i] == key) {
@@ -134,6 +211,12 @@ static text_box_t create_text_box(unsigned short left_px,
 	box.cursor.cursor_x_target = 0;
 	box.cursor.editable_state.capitalization_on = 0;
 	box.cursor.editable_state.capitalization_on_locked = 0;
+	box.redraw_areas.changes_begin.line = 0;
+	box.redraw_areas.changes_begin.char_i = 0;
+	box.redraw_areas.changes_end = box.redraw_areas.changes_begin;
+	box.redraw_areas.vvlines_begin_changed = 0;
+	box.redraw_areas.old_cursor.y = 0;
+	box.redraw_areas.old_cursor.x = 0;
 	initialize_lines(&box, text);
 	if (box.lines.count == 0) {
 		add_new_line(&box, 0);
@@ -175,7 +258,7 @@ static void insert_line_break(text_box_t* box) {
 	// remove the vline of the cursor position
 	if (changes_begin.char_i > 0)
 		--changes_begin.char_i;
-	move_cursor(box, 0, 0);
+	line_chi_to_char_point(box, *cursor_pos, &box->redraw_areas.old_cursor);
 	++cursor_pos->line;
 	cursor_pos->char_i = 0;
 	update_changes_from(box, changes_begin, 0);
@@ -187,7 +270,8 @@ static void insert_line_break(text_box_t* box) {
  * Expect box to be editable and in cursor mode
  */
 static void backspace(text_box_t* box) {
-	move_cursor(box, 0, 0);
+	line_chi_to_char_point(box, box->cursor.position, 
+			&box->redraw_areas.old_cursor);
 
 	dyn_arr_line_t* lines = &box->lines;
 	line_t* line = &lines->arr[box->cursor.position.line];
@@ -195,7 +279,6 @@ static void backspace(text_box_t* box) {
 	if (box->cursor.position.char_i == 0) {
 		if (box->cursor.position.line == 0) {
 			// nothing to do
-			move_cursor(box, 1, 0);
 			return;
 		}
 		// concat with previous line
@@ -233,8 +316,8 @@ static void backspace(text_box_t* box) {
  * mode.
  */
 static void insert_char(text_box_t* box, char c) {
-	move_cursor(box, 0, 0);
 	line_chi_t* cursor_pos = &box->cursor.position;
+	line_chi_to_char_point(box, *cursor_pos, &box->redraw_areas.old_cursor);
 
 	line_t* line = &box->lines.arr[cursor_pos->line];
 	if (dyn_arr_char_insert(&line->string, c, cursor_pos->char_i) == -1)
@@ -268,6 +351,27 @@ static void handle_char(text_box_t* box, char c) {
 	}
 }
 
+static void print_cursor_at(text_box_t* box, char_point_t point, int mode, 
+		char dd) {
+	point_t px = {
+		box->left_px + CHARW_TO_PX(point.x),
+		box->top_px + CHARH_TO_PX(point.y)
+	};
+	if (px.x > 127 || px.y > 63 - CHAR_HEIGHT_OUTER + 1) {
+		return;
+	}
+
+	for (int y = 0; y <= (int) CHAR_HEIGHT; ++y)
+		Bdisp_SetPoint_VRAM(px.x, px.y + y, mode);
+	if (dd) {
+		DISPBOX a;
+		a.left = px.x;
+		a.right = px.x;
+		a.top = px.y;
+		a.bottom = px.y + CHAR_HEIGHT;
+		Bdisp_PutDispArea_DD(&a);
+	}
+}
 
 /**
  * mode = 1: print, mode = 0: erase. If box isn't in CURSOR mode, nothing
@@ -278,20 +382,10 @@ static void move_cursor(text_box_t* box, int mode, char dd) {
 		return;
 	}
 
-	point_t px;
-	if (!line_chi_to_point(box, box->cursor.position, &px))
-		return;
-
-	for (int y = -1; y < (int) CHAR_HEIGHT; ++y)
-		Bdisp_SetPoint_VRAM(px.x - 1, px.y + y, mode);
-	if (dd) {
-		DISPBOX a;
-		a.left = px.x - 1;
-		a.right = px.x - 1;
-		a.top = px.y - 1;
-		a.bottom = px.y + CHAR_HEIGHT - 1;
-		Bdisp_PutDispArea_DD(&a);
-	}
+	char_point_t cpoint;
+	size_t vline = line_chi_to_vline(box, box->cursor.position, &cpoint.x, 1);
+	cpoint.y = vline - box->vvlines_begin;
+	print_cursor_at(box, cpoint, mode, dd);
 }
 
 /**
@@ -304,8 +398,8 @@ static void move_cursor(text_box_t* box, int mode, char dd) {
  */
 static int auto_scroll_up_simple(text_box_t* box, size_t vline, char dd) {
 	if (vline < box->vvlines_begin) {
+		box->redraw_areas.vvlines_begin_changed = 1;
 		box->vvlines_begin = vline;
-		print_lines(box, dd);
 		return 1;
 	}
 	return 0;
@@ -345,8 +439,8 @@ static int auto_scroll_up(text_box_t* box, size_t vline, char dd) {
  */
 static int auto_scroll_down(text_box_t* box, size_t vline, char dd) {
 	if (vline >= box->vvlines_begin + box->height) {
+		box->redraw_areas.vvlines_begin_changed = 1;
 		box->vvlines_begin = vline - box->height + 1;
-		print_lines(box, dd);
 		return 1;
 	}
 	return 0;
@@ -361,7 +455,7 @@ static void scroll_up(text_box_t* box, char dd) {
 	}
 
 	--box->vvlines_begin;
-	print_lines(box, dd);
+	box->redraw_areas.vvlines_begin_changed = 1;
 }
 
 /**
@@ -376,7 +470,7 @@ static void scroll_down(text_box_t* box, char dd) {
 	}
 
 	++box->vvlines_begin;
-	print_lines(box, dd);
+	box->redraw_areas.vvlines_begin_changed = 1;
 }
 
 /**
@@ -385,6 +479,10 @@ static void scroll_down(text_box_t* box, char dd) {
 static void handle_cursor_move(text_box_t* box, int move) {
 	line_chi_t* cursor_pos = &box->cursor.position;
 	move_cursor(box, 0, 0);
+	line_chi_to_char_point(box, *cursor_pos, &box->redraw_areas.old_cursor);
+	box->redraw_areas.changes_begin.line = 0;
+	box->redraw_areas.changes_begin.char_i = 0;
+	box->redraw_areas.changes_end = box->redraw_areas.changes_begin;
 	switch (move) {
 		case CODE_LEFT:
 		{
@@ -425,8 +523,6 @@ static void handle_cursor_move(text_box_t* box, int move) {
 		default:
 			handle_cursor_move_vertical(box, move);
 	}
-
-	move_cursor(box, 1, 0);
 }
 
 /**
@@ -437,7 +533,7 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	dyn_arr_line_t* lines = &box->lines;
 
 	size_t count_softbreaks;
-	size_t* vline_starts_old = // vline starts of old line of cursor
+	const size_t* vline_starts_old = // vline starts of old line of cursor
 		get_vline_starts(&lines->arr[cursor_pos->line], &count_softbreaks);
 	size_t new_line_i;
 	// offset of the vline of the new position relative to the line's
@@ -488,7 +584,7 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 
 	line_t* new_line = &lines->arr[new_line_i];
 	size_t count_softbreaks_new;
-	size_t* vline_starts_new = // vline starts of new line of cursor
+	const size_t* vline_starts_new = // vline starts of new line of cursor
 		get_vline_starts(new_line, &count_softbreaks_new);
 
 	// figure out cursor_pos.char_i
@@ -654,20 +750,33 @@ static point_t char_point_to_point(char_point_t point) {
 
 /**
  * returns whether line_chi is currently even visible
- * If line_chi is visible, point is set to the pixel coordinate of top left 
- * corner of that character coordinate.
+ * If line_chi is visible, point is set to the character coordinate of
+ * that character coordinate.
  */
-static char line_chi_to_point(text_box_t* box, line_chi_t line_chi, 
-		point_t* point) {
+static char line_chi_to_char_point(text_box_t* box, line_chi_t line_chi, 
+		char_point_t* point) {
 	unsigned char x;
 	size_t vline = line_chi_to_vline(box, line_chi, &x, 1);
 	
 	if (vline < box->vvlines_begin || vline >= box->vvlines_begin + box->height)
 		return 0;
 
+	point->x = x;
+	point->y = vline - box->vvlines_begin;
+	return 1;
+}
+
+/**
+ * returns whether line_chi is currently even visible
+ * If line_chi is visible, point is set to the pixel coordinate of top left 
+ * corner of that character coordinate.
+ */
+static char line_chi_to_point(text_box_t* box, line_chi_t line_chi, 
+		point_t* point) {
 	char_point_t ch_point;
-	ch_point.x = x;
-	ch_point.y = vline - box->vvlines_begin;
+	if(!line_chi_to_char_point(box, line_chi, &ch_point)) {
+		return 0;
+	}
 	*point = char_point_to_point(ch_point);
 	point->x += box->left_px;
 	point->y += box->top_px;
@@ -688,9 +797,10 @@ static int print_line(text_box_t* box, size_t line_i, char dd) {
  * Return 1 if none of the vlines that should be printed were below what is
  * currently visible, otherwise returns 0.
  */
-static int print_partial_line(text_box_t* box, line_chi_t line_chi, char dd) {
-	dyn_arr_line_t* lines = &box->lines;
-	line_t* line = &lines->arr[line_chi.line];
+static int print_partial_line(const text_box_t* box, line_chi_t line_chi, 
+		char dd) {
+	const dyn_arr_line_t* lines = &box->lines;
+	const line_t* line = &lines->arr[line_chi.line];
 	// exclusive, end of the visible vlines of this line
 	size_t vvlines_local_end;	
 	if (line_chi.line == lines->count - 1) { // line_chi.line is the last line 
@@ -717,7 +827,7 @@ static int print_partial_line(text_box_t* box, line_chi_t line_chi, char dd) {
 		vline = box->vvlines_begin;
 		x = 0;
 		// find new starting index
-		size_t* vline_starts = get_vline_starts(line, NULL);
+		const size_t* vline_starts = get_vline_starts(line, NULL);
 		char_i = vline_starts[vline - line->vline_begin - 1];
 	}
 	else
@@ -731,8 +841,8 @@ static int print_partial_line(text_box_t* box, line_chi_t line_chi, char dd) {
 			++vline;
 			continue;
 		}
-		print_char_xy(box->left_px, box->top_px, x, vline - box->vvlines_begin, 
-				line->string.arr[char_i], 0, dd);
+		print_char_xy(box->left_px, box->top_px, x, vline 
+				- box->vvlines_begin, line->string.arr[char_i], 0, dd);
 		++char_i;
 		++x;
 	}
@@ -792,14 +902,8 @@ static int compare_lines_vline_begin(const void* vline_void,
  * clears screen and then prints all lines in box 
  */
 static void print_lines(text_box_t* box, char dd) {
-	int left_px = box->left_px;
-	int top_px = box->top_px;
-	const DISPBOX area = { 
-		left_px, 
-		top_px, 
-		left_px + CHARW_TO_PX(box->width) - 1, 
-		top_px + CHARH_TO_PX(box->height) - 1 
-	};
+	DISPBOX area;
+	get_full_area(box, &area);
 	Bdisp_AreaClr_VRAM(&area);
 	size_t first_line = dyn_arr_line_bsearch_cb(&box->lines, 
 			(void*) &box->vvlines_begin, &compare_lines_vline_begin);
@@ -889,43 +993,22 @@ static void update_changes_from(text_box_t* box, line_chi_t begin, char dd) {
 		// the cursor can be after the last line
 		last_vline = new_vline;
 	}
-	char scrolled = 1;
+
 	if (!auto_scroll_down(box, new_vline, dd)) {
-		if (!auto_scroll_up(box, new_vline, dd)) {
-			scrolled = 0;
-		}
-	}
-	if (!scrolled) {
-		// did not scroll, need to print manually
-		print_partial_line(box, begin, 0);
-		if (shifted) {
-			for (size_t line_i = begin.line + 1;
-					line_i < lines->count; 
-					++line_i) {
-				if (!print_line(box, line_i, 0))
-					// line_i was (partially) below visible area
-					break;
-			}
-		}
-		size_t new_last_vline = DYN_ARR_LAST(lines)->vline_begin 
-			+ DYN_ARR_LAST(lines)->count_softbreaks;
-		// in case there's still old stuff on the screen
-		clear_below_vline(box, new_last_vline, 0);
-		if (dd) {
-			point_t p;
-			if (!line_chi_to_point(box, begin, &p)) {
-				p.x = box->left_px, p.y = box->top_px;
-			}
-			DISPBOX a;
-			a.top = p.y;
-			a.left = p.x;
-			a.bottom = p.y + CHARH_TO_PX(box->height) - 1;
-			a.right = p.x + CHARW_TO_PX(box->width) - 1;
-			Bdisp_PutDispArea_DD(&a);
-		}
+		auto_scroll_up(box, new_vline, dd);
 	}
 
-	move_cursor(box, 1, 0);
+	if (!box->redraw_areas.vvlines_begin_changed) {
+		// did not scroll, need to print manually
+		box->redraw_areas.changes_begin = begin;
+		if (shifted) {
+			box->redraw_areas.changes_end.line = lines->count;
+			box->redraw_areas.changes_end.char_i = 0;
+		} else {
+			box->redraw_areas.changes_end = begin;
+			++box->redraw_areas.changes_end.line;
+		}
+	}
 }
 
 /**

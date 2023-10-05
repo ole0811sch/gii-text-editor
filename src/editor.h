@@ -68,6 +68,33 @@ typedef enum {
 } interaction_mode_t;
 
 /**
+ * describes what parts of the box need to be redrawn to realize the last
+ * operation. If something needs to be redrawn then this should be indicated by
+ * this struct.
+ */
+typedef struct {
+	/**
+	 * true iff vvlines_begin changed (i.e. we scrolled)
+	 */
+	char vvlines_begin_changed;
+	/**
+	 * vline and column of old cursor which needs to be overwritten if it has
+	 * changed
+	 */
+	char_point_t old_cursor;
+	/**
+	 * begin of changes (inclusive)
+	 * changes_begin and changes_end only describe the changes in line_chi_t
+	 * to char_point_t mappings that result from insertions and deletions.
+	 */
+	line_chi_t changes_begin;
+	/**
+	 * end of changes (exclusive)
+	 */
+	line_chi_t changes_end;
+} redraw_areas_t;
+
+/**
  * stores state and config of one text box
  */
 typedef struct {
@@ -101,6 +128,10 @@ typedef struct {
 	 * first visible vline
 	 */
 	size_t vvlines_begin;
+	/**
+	 * description of what needs to be redrawn
+	 */
+	redraw_areas_t redraw_areas;
 	/**
 	 * when in scroll mode, this stores state related to the cursor
 	 */

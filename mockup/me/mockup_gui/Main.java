@@ -9,10 +9,6 @@ public class Main {
 	private static int SCREEN_WIDTH;
 	private static int SCREEN_HEIGHT;
 	private static final int[] keycode_seq = new int[]{ 
-		KeyBios.KEY_CTRL_F2_,
-		KeyBios.KEY_CHAR_E_,
-		KeyBios.KEY_CHAR_SPACE_,
-		KeyBios.KEY_CHAR_E_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
 		KeyBios.KEY_CTRL_EXE_,
@@ -183,10 +179,11 @@ public class Main {
 		} catch (InterruptedException e) {
 		}
 		int code;
-		if (seq_i < keycode_seq.length)
+		if (seq_i < keycode_seq.length) {
 			code = keycode_seq[seq_i++];
-		else
+		} else {
 			code = KeyBios.KEY_CHAR_A_;
+		}
 		byte[] retVal = new byte[8];
 		System.arraycopy(intToBytes(isChar), 0, retVal, 0, 4);
 		System.arraycopy(intToBytes(code), 0, retVal, 4, 4);

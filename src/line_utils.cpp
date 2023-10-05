@@ -10,16 +10,23 @@ static void remove_last_n_softbreaks(line_t* line, size_t target_count);
  * returns the array in the vline_index of line. If there are no softbreaks,
  * NULL is returned. If count_softbreaks isn't NULL, it is set.
  */
-size_t* get_vline_starts(line_t* line, size_t* count_softbreaks) {
-	if (count_softbreaks != NULL)
-		*count_softbreaks = line->count_softbreaks;
-	if (line->count_softbreaks == 0)
-		return NULL;
-	else if (line->count_softbreaks <= VLINE_INDEX_STATIC_ARR_SIZE)
-		return line->vline_index.s_arr;
-	else
+const size_t* get_vline_starts(const line_t* line, size_t* count_softbreaks) {
+#define GET_VLINE_STARTS \
+	if (count_softbreaks != NULL)\
+		*count_softbreaks = line->count_softbreaks;\
+	if (line->count_softbreaks == 0)\
+		return NULL;\
+	else if (line->count_softbreaks <= VLINE_INDEX_STATIC_ARR_SIZE)\
+		return line->vline_index.s_arr;\
+	else\
 		return line->vline_index.d_arr.arr;
+	GET_VLINE_STARTS
 }
+
+size_t* get_vline_starts_mut(line_t* line, size_t* count_softbreaks) {
+	GET_VLINE_STARTS
+}
+#undef GET_VLINE_STARTS
 
 /**
  * recalculates the vline_index of line, starting with the starting index of
@@ -33,7 +40,8 @@ size_t* get_vline_starts(line_t* line, size_t* count_softbreaks) {
 ptrdiff_t recalculate_vline_index(text_box_t* box, line_t* line, 
 		size_t vline_offs) {
 	size_t count_softbreaks_start;
-	size_t* vline_starts = get_vline_starts(line, &count_softbreaks_start);
+	size_t* vline_starts =
+		get_vline_starts_mut(line, &count_softbreaks_start);
 	size_t  char_i; 
 	if (vline_offs == 0)
 		char_i = 0;
@@ -137,14 +145,14 @@ void initialize_lines(text_box_t* box, const char* str) {
  * If not cursor_mode, then the last vline of this line will be returned and x
  * might be equal to EDITOR_COLUMNS.
  */
-size_t line_chi_to_vline(text_box_t* box, line_chi_t line_chi, 
+size_t line_chi_to_vline(const text_box_t* box, line_chi_t line_chi, 
 		unsigned char* x, char cursor_mode) {
 	line_t* line = &box->lines.arr[line_chi.line];
 	unsigned char tentative_x;
 	size_t tentative_vline;
 
 	// find the correct array
-	size_t* vline_starts = get_vline_starts(line, NULL);
+	const size_t* vline_starts = get_vline_starts(line, NULL);
 
 	// check if the line_chi is in first vline of the line
 	if (line->count_softbreaks == 0 || line_chi.char_i < vline_starts[0]) {

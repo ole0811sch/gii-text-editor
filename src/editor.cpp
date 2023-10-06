@@ -116,7 +116,7 @@ static void redraw_changes(text_box_t* box) {
 		point_t begin;
 		line_chi_to_point(box, ras->changes_begin, &begin);
 		a.top = begin.y;
-		a.left = begin.x;
+		a.left = box->left_px;
 		a.right = box->left_px + CHARW_TO_PX(box->width) - 1;
 		a.bottom = box->top_px + CHARH_TO_PX(box->height) - 1;
 		Bdisp_PutDispArea_DD(&a);
@@ -531,19 +531,23 @@ static void handle_cursor_move(text_box_t* box, int move) {
 static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	line_chi_t* cursor_pos = &box->cursor.position;
 	dyn_arr_line_t* lines = &box->lines;
+	line_t* current_line = &box->lines.arr[cursor_pos->line];
 
 	size_t count_softbreaks;
 	const size_t* vline_starts_old = // vline starts of old line of cursor
-		get_vline_starts(&lines->arr[cursor_pos->line], &count_softbreaks);
+		get_vline_starts(current_line, &count_softbreaks);
 	size_t new_line_i;
 	// offset of the vline of the new position relative to the line's
 	// vline_begin
 	size_t new_vline_offs; 
+	unsigned char* cursor_x_target = &box->cursor.cursor_x_target;
+	// visual cursor column
 	unsigned char x;
 
+	unsigned char current_x;
+	size_t current_vline = line_chi_to_vline(box, *cursor_pos, &current_x, 1);
 	if (move == CODE_UP) {
-		if (vline_starts_old == NULL 
-				|| cursor_pos->char_i < vline_starts_old[0]) { 
+		if (current_vline == current_line->vline_begin) { 
 			// in first vline of line
 			if (cursor_pos->line == 0)
 				return;
@@ -553,31 +557,29 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 		}
 		else { // we stay in the same line
 			new_line_i = cursor_pos->line;
-			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x, 1);
+			x = current_x;
 			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
 				- 1;
 		}
 	}
 	else { // down
-		if (vline_starts_old == NULL 
-				|| cursor_pos->char_i 
+		if (vline_starts_old == NULL || cursor_pos->char_i 
 				>= vline_starts_old[count_softbreaks - 1]) { 
 			// last vline of line
 			if (cursor_pos->line == lines->count - 1)
 				return;
 			new_line_i = cursor_pos->line + 1;
 			new_vline_offs = 0;
-			line_chi_to_vline(box, *cursor_pos, &x, 1);
+			x = current_x;
 		}
 		else { // we stay in the same line
 			new_line_i = cursor_pos->line;
-			size_t current_vline = line_chi_to_vline(box, *cursor_pos, &x, 1);
+			x = current_x;
 			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
 				+ 1;
 		}
 	}
 
-	unsigned char* cursor_x_target = &box->cursor.cursor_x_target;
 	// tentatively set x to max(x, *cursor_x_target)
 	if (*cursor_x_target > x)
 		x = *cursor_x_target;
@@ -598,7 +600,12 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	if (x >= vline_length) { // there is no char at x pos in the vline,
 		// cursor_pos->char_i is after last char in line
 		cursor_pos->char_i = new_line->string.count;
-		*cursor_x_target = x;
+		// store ideal column as cursor_x_target
+		if (vline_length < box->width) {
+			*cursor_x_target = x;
+		} else {
+			*cursor_x_target = 0;
+		}
 	}
 	else {
 		cursor_pos->char_i = begin_i + x;
@@ -1007,6 +1014,7 @@ static void update_changes_from(text_box_t* box, line_chi_t begin, char dd) {
 		} else {
 			box->redraw_areas.changes_end = begin;
 			++box->redraw_areas.changes_end.line;
+			box->redraw_areas.changes_end.char_i = 0;
 		}
 	}
 }

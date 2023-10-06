@@ -1,6 +1,7 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
+#include <setjmp.h>
 #ifdef __cplusplus
 extern "C"
 #endif

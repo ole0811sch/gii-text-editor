@@ -632,7 +632,7 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 	unsigned int escape_keys_main[2] = { KEY_CTRL_F1, KEY_CTRL_F2 };
 	text_box_t box;
 	initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, 
-			CURSOR, 1, str2, &box);
+			CURSOR, 1, char_set, &box);
 	while (1) {
 		draw_text_box(&box);
 		unsigned int res = focus_text_box(&box, escape_keys_main, 

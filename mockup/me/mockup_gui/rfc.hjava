@@ -1,10 +1,10 @@
 #include "../../rfc.h"
 
-package build.mockup_gui;
+package me.build.mockup_gui;
 
 import java.util.function.Function;
 import java.util.HashMap;
-import mockup_gui.*;
+import me.mockup_gui.*;
 
 public class RFC {
 	public static final class RFCSpec {

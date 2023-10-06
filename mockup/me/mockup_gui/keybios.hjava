@@ -119,7 +119,7 @@ X(KEY_CTRL_RESERVE1,	30060) \
 X(KEY_CTRL_RESERVE2,	30061) \
 X(KEY_CTRL_RESERVE3,	30062)
 
-package build.mockup_gui;
+package me.build.mockup_gui;
 
 public class KeyBios {
 #define EMPTY

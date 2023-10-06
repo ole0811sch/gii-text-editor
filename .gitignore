@@ -5,6 +5,7 @@ Debug/
 src/Build/
 mockup/Build/
 mockup/me/build/
+mockup/*.args
 
 *.dlr
 *.G1A

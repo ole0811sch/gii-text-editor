@@ -1,4 +1,4 @@
-package mockup_gui;
+package me.mockup_gui;
 import javax.swing.*;
 import java.awt.Color;
 import java.awt.Dimension;

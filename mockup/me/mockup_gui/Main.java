@@ -1,9 +1,9 @@
-package mockup_gui;
+package me.mockup_gui;
 
-import build.mockup_gui.RFC.RFCSpec;
+import me.build.mockup_gui.RFC.RFCSpec;
 import java.util.Arrays;
 import java.io.IOException;
-import build.mockup_gui.*;
+import me.build.mockup_gui.*;
 
 public class Main {
 	private static int SCREEN_WIDTH;

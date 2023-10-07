@@ -12,8 +12,9 @@ all: $(BLDDIR)/mockup_gui.jar
 clean:
 	rm -f -r $(BLDDIR)/* $(ROOTPKG)/me/build/* $(ROOTPKG)/me/mockup_gui/*.class
 
-$(BLDDIR)/mockup_gui.jar: $(BLDDIR)/mockup_gui/RFC.class $(BLDDIR)/mockup_gui/KeyBios.class $(BLDDIR)/mockup_gui/Main.class
-	jar -v -c -f $@ -e mockup_gui.Main -C $(BLDDIR)/ .
+$(BLDDIR)/mockup_gui.jar: $(BLDDIR)/mockup_gui/RFC.class \
+	$(BLDDIR)/mockup_gui/KeyBios.class $(BLDDIR)/mockup_gui/Main.class
+	jar -v -c -f $@ -e me.mockup_gui.Main -C $(BLDDIR)/ .
 
 $(BLDDIR)/mockup_gui/RFC.class: $(ROOTPKG)/me/build/mockup_gui/RFC.java \
 	$(ROOTPKG)/me/mockup_gui/Main.java $(ROOTPKG)/me/build/mockup_gui/KeyBios.java

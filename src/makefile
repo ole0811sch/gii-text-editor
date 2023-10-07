@@ -3,9 +3,9 @@ CFLAGS = -I../mockup/includeFX -I../mockup -D MOCKUP -x c -std=c99 -Wall -pedant
 		 -Wno-unknown-pragmas -g
 BLDDIR = Build
 OBJ = $(addprefix $(BLDDIR)/, dyn_arrs.o editor.o font.o fxlib_mockup.o main.o \
-	  util.o line.o line_utils.o commands.o clipboard.o)
+	  util.o line.o line_utils.o commands.o clipboard.o editor_render.o)
 
-.PHONY: all clean run build_dir test test_main
+.PHONY: all clean run build_dir test test_main test_commands
 
 all: $(BLDDIR)/mockup.out
 	cd ../mockup/ && $(MAKE)
@@ -17,7 +17,7 @@ clean:
 test: $(BLDDIR)/test.out
 	./$^
 
-$(BLDDIR)/test.out: $(OBJ) test_main | build_dir
+$(BLDDIR)/test.out: $(OBJ) test_main test_commands | build_dir
 	$(CC) $(CFLAGS) -x none $(OBJ) -o $@
 
 $(BLDDIR)/mockup.out: $(OBJ) | build_dir
@@ -54,7 +54,14 @@ $(BLDDIR)/util.o: util.cpp | build_dir
 $(BLDDIR)/commands.o: commands.cpp commands.h | build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
+test_commands: commands.cpp
+	$(CC) $(CFLAGS) -c -D TEST_MODE commands.cpp -o $(BLDDIR)/commands.o
+
 $(BLDDIR)/clipboard.o: clipboard.cpp clipboard.h | build_dir
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BLDDIR)/editor_render.o: editor_render.cpp editor.h editor_render.h | \
+	build_dir
 	$(CC) $(CFLAGS) -c $< -o $@
 
 build_dir: 

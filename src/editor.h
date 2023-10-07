@@ -212,5 +212,12 @@ size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size);
  * frees all resources associated with the text box
  */
 void destruct_text_box(text_box_t* box);
+/**
+ * returns whether line_chi is currently even visible
+ * If line_chi is visible, point is set to the character coordinate of
+ * that character coordinate.
+ */
+char line_chi_to_char_point(text_box_t* box, line_chi_t line_chi, 
+		char_point_t* point);
 
 #endif

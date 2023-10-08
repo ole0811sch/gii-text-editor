@@ -17,10 +17,17 @@ extern "C" {
 
 #include <stddef.h>
 
-#define CODE_UP -3
-#define CODE_DOWN -4
-#define CODE_LEFT -5
-#define CODE_RIGHT -6
+typedef enum editor_code {
+	CODE_NONE = -1,
+	CODE_RESERVED = -2,
+	CODE_UP = -3,
+	CODE_DOWN = -4,
+	CODE_LEFT = -5,
+	CODE_RIGHT = -6,
+	CODE_TOGGLE_SELECTION = -7,
+	CODE_COPY = -8,
+	CODE_PASTE = -9
+} editor_code_t;
 
 /* boundaries (inclusive) of the text box of the editor as pixel coordinates */
 #define EDITOR_TOP 0
@@ -79,9 +86,13 @@ typedef struct {
 	char vvlines_begin_changed;
 	/**
 	 * vline and column of old cursor which needs to be overwritten if it has
-	 * changed
+	 * changed.
 	 */
 	char_point_t old_cursor;
+	/**
+	 * true iff we were in selection mode yet the cursor was printed
+	 */
+	char selection_cursor;
 	/**
 	 * begin of changes (inclusive)
 	 * changes_begin and changes_end only describe the changes in line_chi_t
@@ -93,7 +104,6 @@ typedef struct {
 	 */
 	line_chi_t changes_end;
 } redraw_areas_t;
-
 /**
  * stores state and config of one text box
  */
@@ -137,7 +147,7 @@ typedef struct {
 	 */
 	struct cursor_state {
 		/**
-		 * position of the cursor
+		 * position of the cursor (the character it is before)
 		 */
 		line_chi_t position;
 		/** 
@@ -190,7 +200,8 @@ void initialize_text_box(unsigned short left_px, unsigned short top_px,
  * clears area of the text box and then draws it
  * To begin interacting with it, also call focus_text_box
  */
-void draw_text_box(text_box_t* box);
+void draw_text_box(const text_box_t* box);
+
 /**
  * Starts interaction with the box, i.e., up, left, bottom and top button
  * presses will move the cursor or the displayed section and other keys will
@@ -208,16 +219,22 @@ unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[],
  * or have been written when all could be written. 
  */
 size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size);
+
 /**
  * frees all resources associated with the text box
  */
 void destruct_text_box(text_box_t* box);
+
 /**
  * returns whether line_chi is currently even visible
  * If line_chi is visible, point is set to the character coordinate of
- * that character coordinate.
+ * that character coordinate. If cursor is 1, a char point that is behind the
+ * last character of a line, and that line's last vline is completely filled,
+ * then the coordinates to first char of the next vline will be used. If cursor
+ * is 0, then in this case the y value be the last vline of the line and the x
+ * value will be the width of the box, and 0 will be returned.
  */
-char line_chi_to_char_point(text_box_t* box, line_chi_t line_chi, 
-		char_point_t* point);
+char line_chi_to_char_point(const text_box_t* box, line_chi_t line_chi, 
+		char_point_t* point, int cursor);
 
 #endif

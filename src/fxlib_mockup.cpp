@@ -374,7 +374,14 @@ void Bdisp_AreaClr_VRAM(const DISPBOX *pArea) {
 }
 
 void Bdisp_AreaReverseVRAM(int x1, int y1, int x2, int y2) {
-	fputs("Function \"Bdisp_AreaReverseVRAM\" isn't implemented\n", stderr);
+	if (!check_point_on_screen(x1, y1) 
+			|| !check_point_on_screen(x2, y2)) 
+		return;
+	for (size_t y = y1; y <= y2; ++y) {
+		for (size_t x = x1; x <= x2; ++x) {
+			screen[y][x] ^= 1;
+		}
+	}
 }
 
 void Bdisp_GetDisp_DD(unsigned char *pData) {
@@ -425,6 +432,8 @@ void Bdisp_PutDispArea_DD(const DISPBOX *pArea) {
 
 	// write content
 	unsigned char buf2[buf_len];
+	buf2[buf_len - 1] = 0;	// so valgrind doesn't complain about uninitialized
+							// memory
 	size_t bit_i = 0;
 	for (size_t y = pArea->top; y <= pArea->bottom; ++y) {
 		for (size_t x = pArea->left; x <= pArea->right; ++bit_i, ++x) {
@@ -454,7 +463,11 @@ void Bdisp_SetPoint_DD(int x, int y, unsigned char point) {
 }
 
 void Bdisp_SetPoint_VRAM(int x, int y, unsigned char point) {
-	if (!check_point_on_screen(x, y)) return;
+	if (!check_point_on_screen(x, y)) {
+		fprintf(stderr, "Bdisp_SetPoint_VRAM: (%d, %d) is not on screen\n", 
+				x, y);
+		return;
+	}
 	screen[y][x] = point;
 }
 

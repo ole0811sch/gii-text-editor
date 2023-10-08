@@ -134,17 +134,6 @@ void initialize_lines(text_box_t* box, const char* str) {
 	}
 }
 
-/**
- * if x isn't null, it is set to the char_point_t x value that line_chi
- * corresponds to. 
- * If cursor_mode and if char_i is greater than the index of the last char of 
- * the line, then if the last char of the line is already at the x coordinate,
- * then the first vline of the next line is returned and x is set to 0. Else 
- * the last vline of this line is returned and x will be set to be char_x + 1
- * where char_x is the column of the last character. 
- * If not cursor_mode, then the last vline of this line will be returned and x
- * might be equal to EDITOR_COLUMNS.
- */
 size_t line_chi_to_vline(const text_box_t* box, line_chi_t line_chi, 
 		unsigned char* x, char cursor_mode) {
 	line_t* line = &box->lines.arr[line_chi.line];
@@ -201,9 +190,6 @@ static void remove_last_n_softbreaks(line_t* line, size_t target_count) {
 	line->count_softbreaks = target_count;
 }
 
-/**
- * adds an empty line_t to box->lines
- */
 void add_new_line(text_box_t* box, size_t vline_begin) {
 	line_t new_line;
 	new_line.vline_begin = vline_begin;
@@ -213,3 +199,27 @@ void add_new_line(text_box_t* box, size_t vline_begin) {
 	if (dyn_arr_char_create(1, 2, 1, string) == -1)
 		display_fatal_error("Out of memory");
 }
+
+void line_chi_min_max(const line_chi_t* a, const line_chi_t* b, line_chi_t* min, 
+		line_chi_t* max) {
+	if (line_chi_greater_than(*a, *b)) {
+		if (min)
+			*min = *b;
+		if (max)
+			*max = *a;
+	} else {
+		if (min)
+			*min = *a;
+		if (max)
+			*max = *b;
+	}
+}
+
+int line_chi_greater_than(line_chi_t a, line_chi_t b) {
+	return a.line > b.line || (a.line == b.line && a.char_i > b.char_i);
+}
+
+int line_chi_equals(line_chi_t a, line_chi_t b) {
+	return a.line == b.line && a.char_i == b.char_i;
+}
+

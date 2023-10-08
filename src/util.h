@@ -17,6 +17,13 @@ extern "C" {
 #define RIGHT 127
 #define EVAL(x) x
 #define ARR_LEN(arr) (sizeof(arr)/sizeof((arr)[0]))
+#define MAX(dest, a, b) do {\
+		if (a > b) *dest = a; else *dest = b; \
+	while (0)
+
+#define MIN(dest, a, b) do {\
+		if (a < b) *dest = a; else *dest = b; \
+	while (0)
 
 #define DEBUG
 
@@ -72,5 +79,6 @@ void display_error(const char* msg);
 void draw_separator(int bottom_px);
 
 extern char tmp_buf[256];
+
 
 #endif

@@ -24,7 +24,7 @@
 // static function declarations
 static int key_code_to_ascii(text_box_t* box, unsigned int code);
 static void handle_char(text_box_t* box, char c);
-static void handle_cursor_move(text_box_t* box, int move);
+static void handle_cursor_move(text_box_t* box, editor_code_t move);
 static void	handle_cursor_move_vertical(text_box_t* box, int move);
 static int auto_scroll_down(text_box_t* box, size_t cursor_vline);
 static int auto_scroll_up(text_box_t* box, size_t vline);
@@ -38,18 +38,26 @@ static text_box_t create_text_box(unsigned short left_px,
 		const char* text);
 static void scroll_up(text_box_t* box);
 static void scroll_down(text_box_t* box);
+static void handle_editor_code(text_box_t* box, editor_code_t code);
+static void start_selection(text_box_t* box);
+static void cancel_selection(text_box_t* box);
+static void copy_selection(text_box_t* box);
+static void paste_clipboard(text_box_t* box);
 
 /**
  * sets box->redraw_areas to a state that states that nothing needs to be
  * redrawn
  */
-static void clear_changes(text_box_t* box) {
+static void reinit_changes(text_box_t* box) {
 	redraw_areas_t* ras = &box->redraw_areas;
-	line_chi_to_char_point(box, box->cursor.position, &ras->old_cursor);
+	line_chi_to_char_point(box, box->cursor.position, &ras->old_cursor, 1);
 	ras->vvlines_begin_changed = 0;
 	ras->changes_begin.line = 0;
 	ras->changes_begin.char_i = 0;
 	ras->changes_end = ras->changes_begin;
+	ras->selection_cursor = box->interaction_mode == CURSOR 
+		&& box->cursor.visual_mode
+		&& line_chi_equals(box->cursor.position, box->cursor.selection_begin);
 }
 
 void initialize_text_box(unsigned short left_px, unsigned short top_px,
@@ -71,7 +79,7 @@ void destruct_text_box(text_box_t* box) {
  * Prints the entire text box, not including the cursor. Does not clear the area
  * first.
  */
-void draw_text_box(text_box_t* box) {
+void draw_text_box(const text_box_t* box) {
 	print_lines(box);
 }
 
@@ -87,7 +95,7 @@ unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[],
 	while (1) {
 		unsigned int key;
 		redraw_changes(box);
-		clear_changes(box);
+		reinit_changes(box);
 		GetKey(&key);
 		for (unsigned int i = 0; i < count_escape_keys; ++i) {
 			if (escape_keys[i] == key) {
@@ -98,19 +106,8 @@ unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[],
 		int c = key_code_to_ascii(box, key);
 		if (c >= 0) {
 			handle_char(box, (char) c);
-		}
-		else if (c <= CODE_UP && c >= CODE_RIGHT) {
-			if (box->interaction_mode == CURSOR) {
-				handle_cursor_move(box, c);
-			}
-			else { // SCROLL
-				if (c == CODE_UP) {
-					scroll_up(box);
-				}
-				else if (c == CODE_DOWN) {
-					scroll_down(box);
-				}
-			}
+		} else {
+			handle_editor_code(box, (editor_code_t) c);
 		}
 	}
 end_while:
@@ -145,10 +142,11 @@ static text_box_t create_text_box(unsigned short left_px,
 	box.cursor.cursor_x_target = 0;
 	box.cursor.editable_state.capitalization_on = 0;
 	box.cursor.editable_state.capitalization_on_locked = 0;
+	box.cursor.visual_mode = 0;
+	box.redraw_areas.vvlines_begin_changed = 0;
 	box.redraw_areas.changes_begin.line = 0;
 	box.redraw_areas.changes_begin.char_i = 0;
 	box.redraw_areas.changes_end = box.redraw_areas.changes_begin;
-	box.redraw_areas.vvlines_begin_changed = 0;
 	box.redraw_areas.old_cursor.y = 0;
 	box.redraw_areas.old_cursor.x = 0;
 	initialize_lines(&box, text);
@@ -192,7 +190,6 @@ static void insert_line_break(text_box_t* box) {
 	// remove the vline of the cursor position
 	if (changes_begin.char_i > 0)
 		--changes_begin.char_i;
-	line_chi_to_char_point(box, *cursor_pos, &box->redraw_areas.old_cursor);
 	++cursor_pos->line;
 	cursor_pos->char_i = 0;
 	update_changes_from(box, changes_begin);
@@ -204,8 +201,6 @@ static void insert_line_break(text_box_t* box) {
  * Expect box to be editable and in cursor mode
  */
 static void backspace(text_box_t* box) {
-	line_chi_to_char_point(box, box->cursor.position, 
-			&box->redraw_areas.old_cursor);
 
 	dyn_arr_line_t* lines = &box->lines;
 	line_t* line = &lines->arr[box->cursor.position.line];
@@ -251,7 +246,6 @@ static void backspace(text_box_t* box) {
  */
 static void insert_char(text_box_t* box, char c) {
 	line_chi_t* cursor_pos = &box->cursor.position;
-	line_chi_to_char_point(box, *cursor_pos, &box->redraw_areas.old_cursor);
 
 	line_t* line = &box->lines.arr[cursor_pos->line];
 	if (dyn_arr_char_insert(&line->string, c, cursor_pos->char_i) == -1)
@@ -344,7 +338,7 @@ static int auto_scroll_down(text_box_t* box, size_t vline) {
 }
 
 /**
- * updates box and screen. If vvlines_begin is 0 already, nothing happens.
+ * updates box. If vvlines_begin is 0 already, nothing happens.
  */
 static void scroll_up(text_box_t* box) {
 	if (box->vvlines_begin == 0) {
@@ -356,7 +350,7 @@ static void scroll_up(text_box_t* box) {
 }
 
 /**
- * updates box and screen. If vvlines_begin is 0 already, nothing happens.
+ * updates box. If vvlines_begin is 0 already, nothing happens.
  */
 static void scroll_down(text_box_t* box) {
 	line_t* last_line = DYN_ARR_LAST(&box->lines);
@@ -372,14 +366,17 @@ static void scroll_down(text_box_t* box) {
 
 /**
  * expects box to be in cursor mode. 
- * @param move which type of move (use macros CODE_LEFT, CODE_RIGHT...) 
+ * @param move which type of move 
  */
-static void handle_cursor_move(text_box_t* box, int move) {
+static void handle_cursor_move(text_box_t* box, editor_code_t move) {
 	line_chi_t* cursor_pos = &box->cursor.position;
-	line_chi_to_char_point(box, *cursor_pos, &box->redraw_areas.old_cursor);
-	box->redraw_areas.changes_begin.line = 0;
-	box->redraw_areas.changes_begin.char_i = 0;
-	box->redraw_areas.changes_end = box->redraw_areas.changes_begin;
+	line_chi_t old_cursor = *cursor_pos;
+	if (!box->cursor.visual_mode) {
+		// mark no changes
+		box->redraw_areas.changes_begin.line = 0;
+		box->redraw_areas.changes_begin.char_i = 0;
+		box->redraw_areas.changes_end = box->redraw_areas.changes_begin;
+	}
 	switch (move) {
 		case CODE_LEFT:
 		{
@@ -419,6 +416,61 @@ static void handle_cursor_move(text_box_t* box, int move) {
 		}
 		default:
 			handle_cursor_move_vertical(box, move);
+	}
+	if (box->cursor.visual_mode) {
+		// set changes as ranging from old cursor position to new cursor
+		// position (or the other way round)
+		line_chi_min_max(&box->cursor.position, &old_cursor, 
+				&box->redraw_areas.changes_begin,
+				&box->redraw_areas.changes_end);
+		if (line_chi_greater_than(box->cursor.selection_begin, 
+					box->cursor.position)) {
+			// fix the left margin of the first and previously first char of
+			// selection
+			if (move == CODE_UP || move == CODE_LEFT) {
+				// include previous first char of selection in changes since the
+				// left margin needs to be printed over 
+				line_t* old_line = &box->lines.arr[old_cursor.line];
+				// increment changes_end
+				// <= because that's allowed (due to the cursor)
+				if (old_cursor.char_i + 1 <= old_line->string.count) {
+					++box->redraw_areas.changes_end.char_i;
+				} else {
+					box->redraw_areas.changes_end.char_i = 0;
+					box->redraw_areas.changes_end.line = old_cursor.line + 1;
+					if (old_cursor.char_i == old_line->string.count
+							&& old_cursor.line + 1 < box->lines.count
+							&& 1 < box->lines.arr[old_cursor.line + 1]
+							.string.count) {
+						// we were in the next vline due to cursor overflow so 
+						// we need to redraw the first char of the next line 
+						// (which exists) as well
+						box->redraw_areas.changes_end.char_i = 1;
+					}
+				}
+			} else {
+				// include character after new cursor (first char in sel) as
+				// well, in order to clear the left margin
+				line_chi_t* c_end = &box->redraw_areas.changes_end;
+				line_t* cur_line = &box->lines.arr[c_end->line];
+				if (c_end->char_i + 1 <= cur_line->string.count) {
+					++c_end->char_i;
+				} else {
+					if (c_end->char_i == cur_line->string.count
+							&& c_end->line + 1 < box->lines.count
+							&& 1 < box->lines.arr[c_end->line + 1]
+							.string.count) {
+						// we were in the next vline due to cursor overflow so 
+						// we need to redraw the first char of the next line 
+						// (which exists) as well
+						c_end->char_i = 1;
+					} else {
+						c_end->char_i = 0;
+					}
+					++c_end->line;
+				}
+			}
+		}
 	}
 }
 
@@ -518,9 +570,8 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 }
 
 /**
- * returns the corresponding ascii code, or -1 if this key does not correpond to
- * any ascii code, or -3 to -6 (CODE_{UP, DOWN, RIGHT, LEFT}) when the
- * navigation buttons were used. Backspace is '\x08', enter is '\n'.
+ * returns the corresponding ascii code or a value in enum editor_code (all
+ * negative). Backspace is '\x08', enter is '\n'.
  */
 static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 	const signed char capitalization_once = -1;
@@ -590,7 +641,8 @@ static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 	X(LEFT, CODE_LEFT) \
 	X(RIGHT, CODE_RIGHT) \
 	X(EXE, '\n') \
-	X(DEL, '\x08')
+	X(DEL, '\x08') \
+	X(F3, CODE_TOGGLE_SELECTION)
 	signed char ch;
 	switch (code) {
 #define X(c, c_literal) case EVAL(EVAL(KEY_CHAR_##c)): ch = c_literal; break;
@@ -600,17 +652,17 @@ static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 		EASY_CASES_CTRL
 #undef X
 #undef EASY_CASE
-		default: return -1;
+		default: return CODE_NONE;
 	}
 	char* capitalization_on = &box->cursor.editable_state.capitalization_on;
 	char* capitalization_on_locked = &box->cursor.editable_state
 		.capitalization_on_locked;
 	if (ch == capitalization_once) {
 		*capitalization_on = 1;
-		return -1;
+		return CODE_NONE;
 	} else if (ch == capitalization_lock) {
 		*capitalization_on_locked ^= 1;
-		return -1;
+		return CODE_NONE;
 	} else if (ch < 0) {
 		return ch;
 	}
@@ -643,21 +695,25 @@ static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 
 
 
-char line_chi_to_char_point(text_box_t* box, line_chi_t line_chi, 
-		char_point_t* point) {
+char line_chi_to_char_point(const text_box_t* box, line_chi_t line_chi, 
+		char_point_t* point, int cursor) {
 	unsigned char x;
-	size_t vline = line_chi_to_vline(box, line_chi, &x, 1);
+	size_t vline = line_chi_to_vline(box, line_chi, &x, cursor);
 	
-	if (vline < box->vvlines_begin || vline >= box->vvlines_begin + box->height)
+	if (vline < box->vvlines_begin 
+			|| vline >= box->vvlines_begin + box->height)
 		return 0;
 
 	point->x = x;
 	point->y = vline - box->vvlines_begin;
+	if (x == box->width) {
+		return 0;
+	}
 	return 1;
 }
 
 /**
- * updates vline_indices, cursor and screen according to a change that starts at
+ * updates vline_indices and cursor according to a change that starts at
  * begin. begin is used to determine the last vline whose index in vline_index
  * is still correct. The cursor should be at the correct position already, 
  * to determine if scrolling is necessary. 
@@ -765,4 +821,62 @@ size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
 		sum_chars += box->lines.arr[i].string.count;
 	}
 	return sum_chars;
+}
+
+static void handle_editor_code(text_box_t* box, editor_code_t code) {
+	if (code == CODE_PASTE) {
+		paste_clipboard(box);
+	} else if (box->interaction_mode == CURSOR) {
+		if (code == CODE_UP || code == CODE_LEFT 
+				|| code == CODE_DOWN || code == CODE_RIGHT) {
+			handle_cursor_move(box, code);
+		} else if (box->cursor.visual_mode) {
+			if (code == CODE_TOGGLE_SELECTION) {
+				cancel_selection(box);
+			} else if (code == CODE_COPY) {
+				copy_selection(box);
+			} 
+		} else {
+			if (code == CODE_TOGGLE_SELECTION) {
+				start_selection(box);
+			}
+		}
+	} else {
+		if (code == CODE_UP) {
+			scroll_up(box);
+		} else if (code == CODE_DOWN) {
+			scroll_down(box);
+		}
+	}
+}
+
+/**
+ * expects box to be in cursor mode
+ */
+static void start_selection(text_box_t* box) {
+	box->cursor.selection_begin = box->cursor.position;
+	box->cursor.visual_mode = 1;
+}
+
+/**
+ * expects box to be in cursor mode
+ */
+static void cancel_selection(text_box_t* box) {
+	line_chi_min_max(&box->cursor.position, &box->cursor.selection_begin, 
+			&box->redraw_areas.changes_begin, &box->redraw_areas.changes_end);
+	box->cursor.visual_mode = 0;
+}
+
+/**
+ * expects box to be in selection mode
+ */
+static void copy_selection(text_box_t* box) {
+	// TODO
+}
+
+/**
+ * expects box to be in cursor mode and editable
+ */
+static void paste_clipboard(text_box_t* box) {
+	// TODO
 }

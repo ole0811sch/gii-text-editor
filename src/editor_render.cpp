@@ -380,18 +380,7 @@ static void fill_linewise_with(const text_box_t* box, line_chi_t begin,
 		begin_pt.x -= MARGIN_LEFT;
 	}
 
-	line_chi_t endi = end; // inclusive end
-	if (end.char_i == 0) {
-		--endi.line;
-		endi.char_i = box->lines.arr[endi.line].string.count;
-		// if endi points to an empty line, it will end up point to the
-		// non-existing char at index 0
-		if (endi.char_i > 0) {
-			--endi.char_i;
-		}
-	} else {
-		--endi.char_i;
-	}
+	line_chi_t endi = line_chi_decrement(box, &end); // inclusive end
 
 	if (!line_chi_to_char_point(box, endi, &end_cpt, 1)) {
 		end_cpt.x = 0;

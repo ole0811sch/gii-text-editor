@@ -103,6 +103,7 @@
 #define DYN_ARR_RAW_BSEARCH _DYN_ARR_F1S(raw_bsearch)
 #define DYN_ARR_RAW_BSEARCH_CB _DYN_ARR_F1S(raw_bsearch_cb)
 #define DYN_ARR_ADD_ALL _DYN_ARR_F1S(add_all)
+#define DYN_ARR_REMOVE_SOME _DYN_ARR_F1S(remove_some)
 
 
 
@@ -195,6 +196,16 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr);
  * is equivalent to calling dyn_arr_$type_pop n times.
  */
 PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n);
+/**
+ * name: dyn_arr_$type_remove
+ * returns 0 on success, -1 if it tried to shrink the array and could not 
+ * reallocate the array. In this case the operation had no effect. The function
+ * is equivalent to calling dyn_arr_$type_remove end_i - start_i times with
+ * index = start_i.
+ * @param start_i begin of range to delete (inclusive)
+ * @param end_i end of range to delete (exclusive)
+ */
+PFX int DYN_ARR_REMOVE_SOME(DYN_ARR_T* dyn_arr, size_t start_i, size_t end_i);
 
 /**
  * name: dyn_arr_$type_destroy
@@ -415,6 +426,34 @@ PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n) {
 	return _DYN_ARR_CHANGE_SIZE(dyn_arr, capacity);
 }
 
+PFX int DYN_ARR_REMOVE_SOME(DYN_ARR_T* dyn_arr, size_t start_i, size_t end_i) {
+	if (end_i > dyn_arr->count) {
+		end_i = dyn_arr->count;
+	}
+	if (start_i >= end_i) {
+		return 0;
+	}
+
+	size_t diff = end_i - start_i;
+	for (size_t i = start_i; i < dyn_arr->count - diff; ++i) {
+		dyn_arr->arr[i] = dyn_arr->arr[i + diff];
+	}
+	dyn_arr->count -= diff;
+
+	// find smallest capacity that's over the threshold
+	size_t next_capacity = dyn_arr->capacity;
+	size_t capacity;
+	do {
+		capacity = next_capacity;
+		next_capacity = capacity * dyn_arr->growth_factor_denominator 
+			/ dyn_arr->growth_factor_numerator;
+	} while (next_capacity * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
+						/ DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
+						> dyn_arr->count);
+
+	return _DYN_ARR_CHANGE_SIZE(dyn_arr, capacity);
+}
+
 #ifdef DYN_ARR_CG_SIMPLE_COMPARISON
 PFX size_t DYN_ARR_BSEARCH(const DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
 	return DYN_ARR_RAW_BSEARCH(dyn_arr->arr, dyn_arr->count, element);
@@ -495,3 +534,4 @@ PFX void DYN_ARR_DESTROY(DYN_ARR_T* dyn_arr) {
 #undef _DYN_ARR_CHANGE_SIZE
 #undef DYN_ARR_RAW_BSEARCH
 #undef DYN_ARR_RAW_BSEARCH_CB
+#undef DYN_ARR_REMOVE_SOME

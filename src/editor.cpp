@@ -44,6 +44,9 @@ static void start_selection(text_box_t* box);
 static void cancel_selection(text_box_t* box);
 static void copy_selection(text_box_t* box);
 static void paste_clipboard(text_box_t* box);
+static void delete_selection(text_box_t* box);
+static void delete_range(text_box_t* box, const line_chi_t* start, 
+		const line_chi_t* end);
 
 
 /**
@@ -198,44 +201,65 @@ static void insert_line_break(text_box_t* box) {
  * Expect box to be editable and in cursor mode
  */
 static void backspace(text_box_t* box) {
-
-	dyn_arr_line_t* lines = &box->lines;
-	line_t* line = &lines->arr[box->cursor.position.line];
-
-	if (box->cursor.position.char_i == 0) {
-		if (box->cursor.position.line == 0) {
-			// nothing to do
-			return;
-		}
-		// concat with previous line
-		line_t* previous = &lines->arr[box->cursor.position.line - 1];
-		line_chi_t begin_change = { box->cursor.position.line - 1, 
-			previous->string.count };
-		if (dyn_arr_char_add_all(&previous->string, 
-					line->string.arr, line->string.count) == -1)
-			display_fatal_error(MSG_ENOMEM);
-		dyn_arr_char_destroy(&line->string);
-		if (dyn_arr_line_remove(lines, box->cursor.position.line) == -1)
-			display_fatal_error(MSG_ENOMEM);
-		box->cursor.position = begin_change;
-		update_changes_from(box, begin_change);
+	if (box->cursor.position.char_i == 0 && box->cursor.position.line == 0) {
+		return;
 	}
-	else {
-		if (dyn_arr_char_remove(&line->string, box->cursor.position.char_i - 1) 
-				== -1)
-			display_fatal_error(MSG_ENOMEM);
-		--box->cursor.position.char_i;
 
-		line_chi_t begin_change = { box->cursor.position.line, 
-			box->cursor.position.char_i };
-		if (begin_change.char_i > 0) {
-			--begin_change.char_i;
-		}
-		update_changes_from(box, begin_change);
-	}
-	box->cursor.cursor_x_target = 0;
+	line_chi_t begin = line_chi_decrement(box, &box->cursor.position);
+	delete_range(box, &begin, &box->cursor.position);
 }
 
+
+/**
+ * expects start and end to both point chars (or linebreaks) within the box.
+ * Expects box to be in cursor mode and editable.
+ * @param start inclusive
+ * @param end exclusive
+ */
+static void delete_range(text_box_t* box, const line_chi_t* begin, 
+		const line_chi_t* end) {
+	if (!line_chi_greater_than(*end, *begin)) {
+		return;
+	}
+	line_t* first = &box->lines.arr[begin->line]; // first line in range
+	line_t* last = &box->lines.arr[end->line]; // line containing suffix to
+											   // concat the prefix of first 
+											   // with
+	if (first == last) {
+		// simple case, just remove the chars from that line since we don't need
+		// to merge lines
+		if (dyn_arr_char_remove_some(&first->string, begin->char_i, 
+					end->char_i) == -1) {
+			display_fatal_error(MSG_ENOMEM);
+		}
+		box->cursor.position = *begin;
+		box->cursor.cursor_x_target = 0;
+		update_changes_from(box, *begin);
+	} else {
+		// remove suffix from first, concat first with suffix of last, then
+		// remove [begin->line + 1, end->line + 1) from box->lines.
+		if (dyn_arr_char_remove_some(&first->string, begin->char_i, 
+					first->string.count) == -1
+				|| dyn_arr_char_add_all(&first->string, 
+					&last->string.arr[end->char_i],
+					last->string.count - end->char_i) == -1) {
+			display_fatal_error(MSG_ENOMEM);
+		}
+		for (size_t i = begin->line + 1;
+				i < end->line + 1 && i < box->lines.count; ++i) {
+			dyn_arr_char_destroy(&box->lines.arr[i].string);
+		}
+		if (dyn_arr_line_remove_some(&box->lines, begin->line + 1, 
+					end->line + 1) == -1) {
+			display_fatal_error(MSG_ENOMEM);
+		}
+		box->cursor.position = *begin;
+		box->cursor.cursor_x_target = 0;
+		update_changes_from(box, *begin);
+		box->redraw_areas.changes_end.line = box->lines.count;
+		box->redraw_areas.changes_end.char_i = 0;
+	}
+}
 
 /**
  * updates lines, cursor and screen. Expects box to be editable and in cursor
@@ -261,7 +285,7 @@ static void insert_char(text_box_t* box, char c) {
  */
 static void handle_char(text_box_t* box, char c) {
 	if (box->interaction_mode != CURSOR || !box->cursor.editable 
-			|| box->cursor.visual_mode)
+			|| (box->cursor.visual_mode && c != '\x08'))
 		return;
 
 	switch(c) {
@@ -269,7 +293,11 @@ static void handle_char(text_box_t* box, char c) {
 			insert_line_break(box);
 			break;
 		case '\x08':
-			backspace(box);
+			if (box_is_in_visual_mode(box)) {
+				delete_selection(box);
+			} else {
+				backspace(box);
+			}
 			break;
 		default:
 			insert_char(box, c);
@@ -770,6 +798,22 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	}
 }
 
+line_chi_t line_chi_decrement(const text_box_t* box, const line_chi_t* lc) {
+	line_chi_t lci = *lc; // inclusive end
+	if (lc->char_i == 0) {
+		--lci.line;
+		lci.char_i = box->lines.arr[lci.line].string.count;
+		// if lci points to an empty line, it will end up pointing to the
+		// non-existing char at index 0
+		if (lci.char_i > 0) {
+			--lci.char_i;
+		}
+	} else {
+		--lci.char_i;
+	}
+	return lci;
+}
+
 size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
 	line_chi_t begin = { 0, 0 };
 	line_chi_t end = { box->lines.count, 0 };
@@ -937,4 +981,13 @@ static void paste_clipboard(text_box_t* box) {
 	} else {
 		Print((unsigned char*) "empty");
 	}
+}
+
+static void delete_selection(text_box_t* box) {
+	line_chi_t begin;
+	line_chi_t end;
+	line_chi_min_max(&box->cursor.position, &box->cursor.selection_begin, 
+			&begin, &end);
+	delete_range(box, &begin, &end);
+	box->cursor.visual_mode = 0;
 }

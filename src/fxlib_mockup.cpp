@@ -91,7 +91,8 @@ int GetKey(unsigned int *keycode) {
  */
 static char check_point_on_screen(int x, int y) {
 	if (y >= ARR_LEN(screen) || x >= ARR_LEN(screen[0]) || y < 0 || x < 0) {
-		fprintf(stderr, "(%d, %d) is outside the screen space", x, y);
+		fprintf(stderr, "fxlib_mockup.cpp: (%d, %d) is outside the screen"
+				"space", x, y);
 		return 0;
 	}
 	return 1;

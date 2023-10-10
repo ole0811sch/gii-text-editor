@@ -26,6 +26,102 @@ static char line_chi_to_point(const text_box_t* box, line_chi_t line_chi,
 static void fill_linewise_with(const text_box_t* box, line_chi_t begin, 
 		line_chi_t end, int point, int actual_begin);
 static int in_selection(const text_box_t* box, size_t line, size_t char_i);
+static void redraw_background(const text_box_t* box);
+
+/**
+ * redraws parts of box specified by box->redraw_areas. Also updates DD.
+ */
+void redraw_changes(const text_box_t* box) {
+	// TODO make work with selections
+	const redraw_areas_t* ras = &box->redraw_areas;
+	DISPBOX a; 
+	// reprint everything because we scrolled
+	if (ras->vvlines_begin_changed) {
+		get_full_area(box, &a);
+		Bdisp_AreaClr_VRAM(&a);
+		draw_text_box(box);
+		Bdisp_PutDispArea_DD(&a);
+		goto print_cursor;
+	}
+
+	// erase cursor if necessary
+	if (box->interaction_mode == CURSOR && (!box->cursor.visual_mode 
+				|| ras->selection_cursor)) {
+		print_cursor_at(box, ras->old_cursor, 0);
+	}
+	// if changes are marked, redraw them
+	if (line_chi_greater_than(ras->changes_end, ras->changes_begin)) {
+		redraw_background(box);
+
+		// print chars
+		print_partial_line(box, ras->changes_begin);
+		for (size_t line_i = ras->changes_begin.line + 1;
+				line_i < ras->changes_end.line 
+				|| (line_i == ras->changes_end.line 
+				&& ras->changes_end.char_i > 0); 
+				++line_i) {
+			if (!print_line(box, line_i))
+				// line_i was (partially) below visible area
+				break;
+		}
+		size_t new_last_vline = DYN_ARR_LAST(&box->lines)->vline_begin 
+			+ DYN_ARR_LAST(&box->lines)->count_softbreaks;
+		// in case there's still old stuff on the screen
+		clear_below_vline(box, new_last_vline);
+		point_t begin;
+		line_chi_to_point(box, ras->changes_begin, &begin);
+		a.top = begin.y;
+		a.left = box->left_px;
+		a.right = box->left_px + CHARW_TO_PX(box->width) - 1;
+		a.bottom = box->top_px + CHARH_TO_PX(box->height) - 1;
+		Bdisp_PutDispArea_DD(&a);
+	}
+print_cursor:
+	if (box->interaction_mode == CURSOR && (!box->cursor.visual_mode 
+				|| line_chi_equals(box->cursor.position, 
+					box->cursor.selection_begin))) {
+		move_cursor(box, 1);
+	}
+}
+
+/**
+ * first clears the background in the area marked by box->redraw_areas,
+ * then prints the parts of selection that intersect with that area
+ */
+static void redraw_background(const text_box_t* box) {
+	const redraw_areas_t* ras = &box->redraw_areas;
+	// clear bg
+	fill_linewise_with(box, ras->changes_begin, ras->changes_end, 0, 0);
+	if (box->interaction_mode == CURSOR && box->cursor.visual_mode) {
+		// print background for selection
+		const line_chi_t* begin_redr_sel;
+		const line_chi_t* end_redr_sel;
+		int actual_begin_redr_sel; // whether the begin is the begin of 
+								   // the selection
+		line_chi_t begin_sel, end_sel;
+		line_chi_min_max(&box->cursor.position, 
+				&box->cursor.selection_begin, &begin_sel, &end_sel);
+		if (line_chi_greater_than(end_sel, ras->changes_begin)) {
+			// the intersection isn't empty
+			if (line_chi_greater_than(ras->changes_begin, begin_sel)) {
+				// we're starting redrawing within the selection
+				actual_begin_redr_sel = 0;
+				begin_redr_sel = &ras->changes_begin;
+			} else {
+				actual_begin_redr_sel = 1;
+				begin_redr_sel = &begin_sel;
+			}
+			if (line_chi_greater_than(end_sel, ras->changes_end)) {
+				// we're ending redrawing within the selection
+				end_redr_sel = &ras->changes_end;
+			} else {
+				end_redr_sel = &end_sel;
+			}
+			fill_linewise_with(box, *begin_redr_sel, *end_redr_sel, 1, 
+					actual_begin_redr_sel);
+		}
+	}
+}
 
 /**
  * clears screen and then prints all lines in box. Also updates DD.
@@ -103,88 +199,6 @@ static void get_full_area(const text_box_t* box, DISPBOX* area) {
 	*area = temp;
 }
 
-/**
- * redraws parts of box specified by box->redraw_areas. Also updates DD
- */
-void redraw_changes(const text_box_t* box) {
-	// TODO make work with selections
-	const redraw_areas_t* ras = &box->redraw_areas;
-	DISPBOX a; 
-	// reprint everything because we scrolled
-	if (ras->vvlines_begin_changed) {
-		get_full_area(box, &a);
-		Bdisp_AreaClr_VRAM(&a);
-		draw_text_box(box);
-		goto print;
-	}
-
-	// erase cursor if necessary
-	if (box->interaction_mode == CURSOR && (!box->cursor.visual_mode 
-				|| ras->selection_cursor)) {
-		print_cursor_at(box, ras->old_cursor, 0);
-	}
-	if (line_chi_greater_than(ras->changes_end, ras->changes_begin)) {
-		// figure out and print the background colors
-		fill_linewise_with(box, ras->changes_begin, ras->changes_end, 0, 0);
-		if (box->interaction_mode == CURSOR && box->cursor.visual_mode) {
-			// print background for selection
-			const line_chi_t* begin_redr_sel;
-			const line_chi_t* end_redr_sel;
-			int actual_begin_redr_sel; // whether the begin is the begin of 
-										// the selection
-			line_chi_t begin_sel, end_sel;
-			line_chi_min_max(&box->cursor.position, 
-					&box->cursor.selection_begin, &begin_sel, &end_sel);
-			if (line_chi_greater_than(end_sel, ras->changes_begin)) {
-				// the intersection isn't empty
-				if (line_chi_greater_than(ras->changes_begin, begin_sel)) {
-					// we're starting redrawing within the selection
-					actual_begin_redr_sel = 0;
-					begin_redr_sel = &ras->changes_begin;
-				} else {
-					actual_begin_redr_sel = 1;
-					begin_redr_sel = &begin_sel;
-				}
-				if (line_chi_greater_than(end_sel, ras->changes_end)) {
-					// we're ending redrawing within the selection
-					end_redr_sel = &ras->changes_end;
-				} else {
-					end_redr_sel = &end_sel;
-				}
-				fill_linewise_with(box, *begin_redr_sel, *end_redr_sel, 1, 
-						actual_begin_redr_sel);
-			}
-		}
-
-		// print chars
-		print_partial_line(box, ras->changes_begin);
-		for (size_t line_i = ras->changes_begin.line + 1;
-				line_i < ras->changes_end.line; 
-				++line_i) {
-			if (!print_line(box, line_i))
-				// line_i was (partially) below visible area
-				break;
-		}
-		size_t new_last_vline = DYN_ARR_LAST(&box->lines)->vline_begin 
-			+ DYN_ARR_LAST(&box->lines)->count_softbreaks;
-		// in case there's still old stuff on the screen
-		clear_below_vline(box, new_last_vline);
-		point_t begin;
-		line_chi_to_point(box, ras->changes_begin, &begin);
-		a.top = begin.y;
-		a.left = box->left_px;
-		a.right = box->left_px + CHARW_TO_PX(box->width) - 1;
-		a.bottom = box->top_px + CHARH_TO_PX(box->height) - 1;
-	}
-
-print:
-	Bdisp_PutDispArea_DD(&a);
-	if (box->interaction_mode == CURSOR && (!box->cursor.visual_mode 
-				|| line_chi_equals(box->cursor.position, 
-					box->cursor.selection_begin))) {
-		move_cursor(box, 1);
-	}
-}
 
 
 static void print_cursor_at(const text_box_t* box, char_point_t point, 

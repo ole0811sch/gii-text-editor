@@ -3,6 +3,7 @@
 #include "fxlib.h"
 #include "line_utils.h"
 #include "line.h"
+#include "clipboard.h"
 
 #include "dispbios.h"
 #include "util.h"
@@ -639,7 +640,9 @@ static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 	X(RIGHT, CODE_RIGHT) \
 	X(EXE, '\n') \
 	X(DEL, '\x08') \
-	X(F3, CODE_TOGGLE_SELECTION)
+	X(F3, CODE_TOGGLE_SELECTION) \
+	X(CLIP, CODE_COPY) \
+	X(PASTE, CODE_PASTE)
 	signed char ch;
 	switch (code) {
 #define X(c, c_literal) case EVAL(EVAL(KEY_CHAR_##c)): ch = c_literal; break;
@@ -768,23 +771,37 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 }
 
 size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
-	if (box->lines.count == 0) {
+	line_chi_t begin = { 0, 0 };
+	line_chi_t end = { box->lines.count, 0 };
+	return get_text_box_partial_string(box, buf, buf_size, &begin, &end);
+}
+
+size_t get_text_box_partial_string(const text_box_t* box, char buf[], 
+		size_t buf_size, line_chi_t* begin, line_chi_t* end) {
+	line_chi_t real_end;
+	line_chi_t abs_end = { box->lines.count - 1, 
+			DYN_ARR_LAST(&box->lines)->string.count };
+	line_chi_min_max(end, &abs_end, &real_end, NULL);
+	if (box->lines.count == 0 
+			|| begin->line >= box->lines.count
+			|| !line_chi_greater_than(real_end, *begin)) {
 		if (buf_size > 0) {
 			buf[0] = '\0';
 		}
 		return 0;
 	}
 
-	// iterate over all characters in all lines until either the buffer's or the
-	// lines end is reached
+	// iterate over all characters in all lines starting at begin, until either 
+	// the buffer's end, the lines' end, or `real_end` is reached
 	size_t buf_i = 0;
-	line_chi_t cl_pos = { 0, 0 };
-	line_t* current_line = &box->lines.arr[0];
-	for (;buf_i < buf_size - 1; ++buf_i) {
-		// increment cl_pos on linebreak
-		if (cl_pos.char_i == current_line->string.count) {
-			// reached end of box
-			if (cl_pos.line == box->lines.count - 1) {
+	line_chi_t cl_pos = *begin;
+	line_t* current_line = &box->lines.arr[cl_pos.line];
+	for (;buf_i + 1 < buf_size
+			&& line_chi_greater_than(real_end, cl_pos); ++buf_i) {
+		// correct cl_pos on linebreak
+		if (cl_pos.char_i >= current_line->string.count) {
+			// reached real_end of box
+			if (cl_pos.line >= box->lines.count - 1) {
 				break;
 			}
 			// continue with next line
@@ -800,22 +817,34 @@ size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
 		++cl_pos.char_i;
 	}
 
-	// could fit all bytes
-	// both when the condition of the for loop triggered and when we break,
-	// cl_pos must be after the last char of the last line (we don't set
-	// cl_pos.char_i to zero if the last line was reached). We also know that
-	// the third state in the for-header was executed one last time after the 
-	// last byte was written.
-	if (cl_pos.char_i >= current_line->string.count 
-			&& cl_pos.line == box->lines.count - 1) {
-		buf[buf_i] = '\0';
+	
+	if (!line_chi_greater_than(real_end, cl_pos)) { 
+		// cl_pos >= real_end, i.e. we wrote every char. There's also one guaranteed
+		// index for NULL terminator due to the condition in the for loop
+		// (except when buf_size == 0).
+		// This index is buf_i since we always increment buf_i after we write.
+		if (buf_size > 0) {
+			buf[buf_i] = '\0';
+		}
 		return buf_i;
 	}
 
-	buf[buf_size - 1] = '\0';
-	size_t sum_chars = box->lines.count - 1; // for the line breaks
-	for (size_t i = 0; i < box->lines.count; ++i) {
-		sum_chars += box->lines.arr[i].string.count;
+	// we didn't write every => set terminator, figure out necessary buffer size
+	// and return it
+	if (buf_size > 0) {
+		buf[buf_size - 1] = '\0';
+	}
+	size_t sum_chars = 0; 
+	if (begin->line == real_end.line) {
+		sum_chars += real_end.char_i - begin->char_i;
+	} else {
+		sum_chars += box->lines.arr[begin->line].string.count - begin->char_i 
+			+ 1; // +1 for line break
+		for (size_t i = begin->line + 1; i < real_end.line; ++i) {
+			sum_chars += box->lines.arr[i].string.count;
+			sum_chars += 1; // for line break
+		}
+		sum_chars += real_end.char_i + 1;
 	}
 	return sum_chars;
 }
@@ -876,12 +905,36 @@ static void cancel_selection(text_box_t* box) {
  * expects box to be in selection mode
  */
 static void copy_selection(text_box_t* box) {
-	// TODO
+	char buf[1024];
+	line_chi_t begin;
+	line_chi_t end;
+	line_chi_min_max(&box->cursor.position, &box->cursor.selection_begin, 
+			&begin, &end);
+	size_t req_size = 
+		get_text_box_partial_string(box, buf, sizeof(buf), &begin, &end) + 1;
+	char* text = buf;
+	if (req_size > sizeof(buf)) {
+		char* tmp = (char*) malloc(req_size);
+		if (!tmp) {
+			display_error("Could not copy to clipboard: Not enough memory");
+			return;
+		}
+		text = tmp;
+		get_text_box_partial_string(box, text, req_size, &begin, &end);
+	}
+	copy_to_clipboard(text, req_size - 1);
+	if (req_size > sizeof(buf)) {
+		free(text);
+	}
 }
 
 /**
  * expects box to be in cursor mode and editable
  */
 static void paste_clipboard(text_box_t* box) {
-	// TODO
+	if (clipboard_contents) {
+		Print((unsigned char*) clipboard_contents);
+	} else {
+		Print((unsigned char*) "empty");
+	}
 }

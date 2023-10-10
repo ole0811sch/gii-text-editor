@@ -245,5 +245,12 @@ int box_is_editable(const text_box_t* box);
  * returns whether the box is in cursor mode and in visual mode
  */
 int box_is_in_visual_mode(const text_box_t* box);
+/**
+ * end may be anywhere after the last char if you want to get the content up to
+ * the end. If begin is not before end, only the NULL terminator will be
+ * written. See get_text_box_string.
+ */
+size_t get_text_box_partial_string(const text_box_t* box, char buf[], 
+		size_t buf_size, line_chi_t* begin, line_chi_t* end);
 
 #endif

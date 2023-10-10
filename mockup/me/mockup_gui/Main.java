@@ -9,10 +9,16 @@ public class Main {
 	private static int SCREEN_WIDTH;
 	private static int SCREEN_HEIGHT;
 	private static final int[] keycode_seq = new int[]{ 
+		KeyBios.KEY_CTRL_RIGHT_,
 		KeyBios.KEY_CTRL_F3_,
 		KeyBios.KEY_CTRL_RIGHT_,
 		KeyBios.KEY_CTRL_RIGHT_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
+		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_RIGHT_,
+		KeyBios.KEY_CTRL_CLIP_,
+		KeyBios.KEY_CTRL_PASTE_,
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_DOWN_,

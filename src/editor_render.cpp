@@ -70,7 +70,7 @@ void redraw_changes(const text_box_t* box) {
 		clear_below_vline(box, new_last_vline);
 		point_t begin;
 		line_chi_to_point(box, ras->changes_begin, &begin);
-		a.top = begin.y;
+		a.top = begin.y - 1;
 		a.left = box->left_px;
 		a.right = box->left_px + CHARW_TO_PX(box->width) - 1;
 		a.bottom = box->top_px + CHARH_TO_PX(box->height) - 1;

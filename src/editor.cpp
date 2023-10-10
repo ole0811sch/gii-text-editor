@@ -44,9 +44,11 @@ static void cancel_selection(text_box_t* box);
 static void copy_selection(text_box_t* box);
 static void paste_clipboard(text_box_t* box);
 
+
 /**
- * sets box->redraw_areas to a state that states that nothing needs to be
- * redrawn
+ * sets box->redraw_areas to a state that states that nothing has changed and
+ * otherwise reflects the current editor state (in particular old_cursor =
+ * cursor.position and selection_cursor is set
  */
 static void reinit_changes(text_box_t* box) {
 	redraw_areas_t* ras = &box->redraw_areas;
@@ -83,12 +85,6 @@ void draw_text_box(const text_box_t* box) {
 	print_lines(box);
 }
 
-/**
- * Handles key events until one of escape_keys is pressed. draw_text_box should
- * be called beforehand. Also updates DD.
- * @param escape_keys array of key codes (as returned by GetKey)
- * @param count_escape_keys length of escape_keys
- */
 unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
 		unsigned int count_escape_keys) {
 	unsigned int ret_val;
@@ -259,11 +255,12 @@ static void insert_char(text_box_t* box, char c) {
 
 
 /**
- * if the interaction_mode isn't CURSOR and editable isn't true, this does
- * nothing
+ * if the interaction_mode isn't CURSOR and editable isn't true, or if the box
+ * is in visual mode, this does nothing
  */
 static void handle_char(text_box_t* box, char c) {
-	if (box->interaction_mode != CURSOR || !box->cursor.editable)
+	if (box->interaction_mode != CURSOR || !box->cursor.editable 
+			|| box->cursor.visual_mode)
 		return;
 
 	switch(c) {
@@ -823,8 +820,16 @@ size_t get_text_box_string(const text_box_t* box, char buf[], size_t buf_size) {
 	return sum_chars;
 }
 
+int box_is_in_visual_mode(const text_box_t* box) {
+	return box->interaction_mode == CURSOR && box->cursor.visual_mode;
+}
+
+int box_is_editable(const text_box_t* box) {
+	return box->interaction_mode == CURSOR && box->cursor.editable;
+}
+
 static void handle_editor_code(text_box_t* box, editor_code_t code) {
-	if (code == CODE_PASTE) {
+	if (box_is_editable(box) && code == CODE_PASTE) {
 		paste_clipboard(box);
 	} else if (box->interaction_mode == CURSOR) {
 		if (code == CODE_UP || code == CODE_LEFT 

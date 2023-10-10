@@ -92,7 +92,7 @@ static void redraw_background(const text_box_t* box) {
 	const redraw_areas_t* ras = &box->redraw_areas;
 	// clear bg
 	fill_linewise_with(box, ras->changes_begin, ras->changes_end, 0, 0);
-	if (box->interaction_mode == CURSOR && box->cursor.visual_mode) {
+	if (box_is_in_visual_mode(box)) {
 		// print background for selection
 		const line_chi_t* begin_redr_sel;
 		const line_chi_t* end_redr_sel;

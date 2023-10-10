@@ -203,10 +203,10 @@ void initialize_text_box(unsigned short left_px, unsigned short top_px,
 void draw_text_box(const text_box_t* box);
 
 /**
- * Starts interaction with the box, i.e., up, left, bottom and top button
- * presses will move the cursor or the displayed section and other keys will
- * lead to text modification if enabled.
- * The text box should be drawn already
+ * Handles key events until one of escape_keys is pressed. draw_text_box should
+ * be called beforehand. Also updates DD.
+ * @param escape_keys array of key codes (as returned by GetKey)
+ * @param count_escape_keys length of escape_keys
  */
 unsigned int focus_text_box(text_box_t* box, unsigned int escape_keys[], 
 		unsigned int count_escape_keys);
@@ -236,5 +236,14 @@ void destruct_text_box(text_box_t* box);
  */
 char line_chi_to_char_point(const text_box_t* box, line_chi_t line_chi, 
 		char_point_t* point, int cursor);
+/**
+ * returns whether the box is in cursor mode and editable. It may also return
+ * true when it is in visual mode, as long as the editable flag is set too.
+ */
+int box_is_editable(const text_box_t* box);
+/**
+ * returns whether the box is in cursor mode and in visual mode
+ */
+int box_is_in_visual_mode(const text_box_t* box);
 
 #endif

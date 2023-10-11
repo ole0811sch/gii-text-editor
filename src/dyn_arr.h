@@ -90,7 +90,9 @@
 #define DYN_ARR_CREATE _DYN_ARR_F1S(create)
 #define DYN_ARR_ADD _DYN_ARR_F1S(add)
 #define DYN_ARR_INSERT _DYN_ARR_F1S(insert)
+#define DYN_ARR_INSERT_SOME _DYN_ARR_F1S(insert_some)
 #define _DYN_ARR_EXTEND _DYN_ARR_F1SP(extend)
+#define DYN_ARR_ENSURE_CAPACITY _DYN_ARR_F1S(ensure_capacity)
 #define _DYN_ARR_SHRINK _DYN_ARR_F1SP(shrink)
 #define _DYN_ARR_CHANGE_SIZE _DYN_ARR_F1SP(change_size)
 #define DYN_ARR_REMOVE _DYN_ARR_F1S(remove)
@@ -158,7 +160,16 @@ PFX int DYN_ARR_CREATE(size_t initial_capacity,
  * returns 0 on success, -1 if it needed to grow the array and could not 
  * reallocate the array. In this case the operation had no effect.
  */
-PFX int DYN_ARR_INSERT(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element, size_t index);
+PFX int DYN_ARR_INSERT(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element, 
+		size_t index);
+
+/**
+ * name: dyn_arr_$type_insert_some
+ * returns 0 on success, -1 if it needed to grow the array and could not 
+ * reallocate the array. In this case the operation had no effect.
+ */
+PFX int DYN_ARR_INSERT_SOME(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr,
+		size_t n, size_t index);
 
 /**
  * name: dyn_arr_$type_add
@@ -173,7 +184,17 @@ PFX int DYN_ARR_ADD(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element);
  * returns 0 on success, -1 if it needed to grow the array and could not 
  * reallocate the array. In this case the operation had no effect.
  */
-PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* arr, size_t n);
+PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr, 
+		size_t n);
+
+/**
+ * name: dyn_arr_$type_ensure_capacity
+ * Ensures that dyn_arr has at least cap capcity. Continues the exponential
+ * growth pattern. Does not shrink the array.
+ * returns 0 on success, -1 if it needed to grow the array and could not 
+ * reallocate the array. In this case the operation had no effect.
+ */
+PFX int DYN_ARR_ENSURE_CAPACITY(DYN_ARR_T* dyn_arr, size_t cap);
 
 /**
  * name: dyn_arr_$type_remove
@@ -193,9 +214,11 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr);
  * name: dyn_arr_$type_pop_some
  * returns 0 on success, -1 if it tried to shrink the array and could not 
  * reallocate the array. In this case the operation had no effect. The functions
- * is equivalent to calling dyn_arr_$type_pop n times.
+ * is equivalent to calling dyn_arr_$type_pop n times. Even if n is 0, it tries
+ * to shrink the dyn_arr.
  */
 PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n);
+
 /**
  * name: dyn_arr_$type_remove
  * returns 0 on success, -1 if it tried to shrink the array and could not 
@@ -311,7 +334,7 @@ PFX int DYN_ARR_CREATE(size_t initial_capacity,
 static int _DYN_ARR_CHANGE_SIZE(DYN_ARR_T* dyn_arr, size_t new_capacity) {
 	DYN_ARR_CG_TYPE* arr = (DYN_ARR_CG_TYPE*) DYN_ARR_CG_REALLOC(
 				dyn_arr->arr, new_capacity * sizeof(DYN_ARR_CG_TYPE));
-	if (arr == NULL)
+	if (arr == NULL && new_capacity > 0)
 		return -1;
 
 	dyn_arr->capacity = new_capacity;
@@ -348,6 +371,29 @@ PFX int DYN_ARR_INSERT(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element,
 	return 0;
 }
 
+PFX int DYN_ARR_INSERT_SOME(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr, 
+		size_t n, size_t index) {
+	if (n == 0) {
+		return 0;
+	}
+
+	if (dyn_arr->count + n >= dyn_arr->capacity 
+			&& DYN_ARR_ENSURE_CAPACITY(dyn_arr, dyn_arr->count + n) == -1) {
+		return -1;
+	}
+
+	if (index > dyn_arr->count) {
+		index = dyn_arr->count;
+	}
+
+	dyn_arr->count += n;
+	for (size_t i = dyn_arr->count - 1; i >= index + n; --i) {
+		dyn_arr->arr[i] = dyn_arr->arr[i - n];
+	}
+	memcpy(dyn_arr->arr + index, arr, n * sizeof(DYN_ARR_CG_TYPE));
+	return 0;
+}
+
 PFX int DYN_ARR_ADD(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
 	if (dyn_arr->count == dyn_arr->capacity 
 			&& _DYN_ARR_EXTEND(dyn_arr) == -1)
@@ -358,11 +404,10 @@ PFX int DYN_ARR_ADD(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
 	return 0;
 }
 
-PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* arr, size_t n) {
-	size_t required_capacity = dyn_arr->count + n;
-	if (required_capacity > dyn_arr->capacity) {
+PFX int DYN_ARR_ENSURE_CAPACITY(DYN_ARR_T* dyn_arr, size_t cap) {
+	if (cap > dyn_arr->capacity) {
 		size_t new_capacity = dyn_arr->capacity;
-		while (required_capacity > new_capacity) {
+		while (cap > new_capacity) {
 			size_t new_capacity_2 = new_capacity * dyn_arr
 				->growth_factor_numerator / dyn_arr->growth_factor_denominator;
 			if (new_capacity_2 <= new_capacity)
@@ -371,8 +416,16 @@ PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE* arr, size_t n) {
 				new_capacity = new_capacity_2;
 		}
 
-		if (_DYN_ARR_CHANGE_SIZE(dyn_arr, new_capacity) == -1)
-			return -1;
+		return _DYN_ARR_CHANGE_SIZE(dyn_arr, new_capacity);
+	}
+	return 0;
+}
+
+PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr, 
+		size_t n) {
+	size_t required_capacity = dyn_arr->count + n;
+	if (DYN_ARR_ENSURE_CAPACITY(dyn_arr, required_capacity) == -1) {
+		return -1;
 	}
 
 	memcpy(dyn_arr->arr + dyn_arr->count, arr, n * sizeof(DYN_ARR_CG_TYPE));
@@ -407,7 +460,7 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr) {
 	return _DYN_ARR_MAYBE_SHRINK(dyn_arr);
 }
 
-PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n) {
+PFX int DYN_ARR_POP_SOME(DYN_ARR_T* dyn_arr, size_t n) {
 	if (n > dyn_arr->count)
 		n = dyn_arr->count;
 	dyn_arr->count -= n;
@@ -438,20 +491,7 @@ PFX int DYN_ARR_REMOVE_SOME(DYN_ARR_T* dyn_arr, size_t start_i, size_t end_i) {
 	for (size_t i = start_i; i < dyn_arr->count - diff; ++i) {
 		dyn_arr->arr[i] = dyn_arr->arr[i + diff];
 	}
-	dyn_arr->count -= diff;
-
-	// find smallest capacity that's over the threshold
-	size_t next_capacity = dyn_arr->capacity;
-	size_t capacity;
-	do {
-		capacity = next_capacity;
-		next_capacity = capacity * dyn_arr->growth_factor_denominator 
-			/ dyn_arr->growth_factor_numerator;
-	} while (next_capacity * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
-						/ DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
-						> dyn_arr->count);
-
-	return _DYN_ARR_CHANGE_SIZE(dyn_arr, capacity);
+	return DYN_ARR_POP_SOME(dyn_arr, diff);
 }
 
 #ifdef DYN_ARR_CG_SIMPLE_COMPARISON
@@ -535,3 +575,5 @@ PFX void DYN_ARR_DESTROY(DYN_ARR_T* dyn_arr) {
 #undef DYN_ARR_RAW_BSEARCH
 #undef DYN_ARR_RAW_BSEARCH_CB
 #undef DYN_ARR_REMOVE_SOME
+#undef DYN_ARR_ENSURE_CAPACITY
+#undef DYN_ARR_INSERT_SOME

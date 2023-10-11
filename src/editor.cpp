@@ -47,6 +47,8 @@ static void paste_clipboard(text_box_t* box);
 static void delete_selection(text_box_t* box);
 static void delete_range(text_box_t* box, const line_chi_t* start, 
 		const line_chi_t* end);
+static void insert_string(text_box_t* box, const char* str, int move_cursor);
+static void abort_model_change(text_box_t* box, const char* msg);
 
 
 /**
@@ -262,22 +264,121 @@ static void delete_range(text_box_t* box, const line_chi_t* begin,
 }
 
 /**
- * updates lines, cursor and screen. Expects box to be editable and in cursor
+ * Expects box to be editable and in cursor
  * mode.
  */
 static void insert_char(text_box_t* box, char c) {
-	line_chi_t* cursor_pos = &box->cursor.position;
-
-	line_t* line = &box->lines.arr[cursor_pos->line];
-	if (dyn_arr_char_insert(&line->string, c, cursor_pos->char_i) == -1)
-		display_fatal_error(MSG_ENOMEM);
-	++cursor_pos->char_i;
-
-	line_chi_t begin = { cursor_pos->line, cursor_pos->char_i - 1 };
-	box->cursor.cursor_x_target = 0;
-	update_changes_from(box, begin);
+	char str[] = { c, '\0' };
+	insert_string(box, str, 1);
 }
 
+/**
+ * @param move_cursor iff true, the cursor will be move to be before the first
+ * char after the inserted string
+ */
+static void insert_string(text_box_t* box, const char* str, int move_cursor) {
+	line_chi_t* cursor_pos = &box->cursor.position;
+	line_t* line = &box->lines.arr[cursor_pos->line];
+	size_t len = strlen(str);
+
+	// remove suffix of first line, store it somewhere else. Iteratively add
+	// the strings between the linebreaks in str to the current line. After
+	// the str has been completely added, append the old suffix from the
+	// first line to the current line
+	const size_t suffix_len = line->string.count - cursor_pos->char_i;
+	char* suffix = (char*) malloc(suffix_len);
+	if (!suffix && suffix_len > 0) {
+		display_error(MSG_ENOMEM);
+		return;
+	}
+	memcpy(suffix, &line->string.arr[cursor_pos->char_i], suffix_len);
+	if (dyn_arr_char_pop_some(&line->string, suffix_len) == -1) {
+		display_error(MSG_ENOMEM);
+		free(suffix);
+		line_chi_t zero = { 0, 0 };
+		update_changes_from(box, zero);
+		return;
+	}
+
+	const char* str_part = str; // part of string between '\n' that we want to
+								// add at the moment
+	size_t cur_i = cursor_pos->line; // index of current line. Should have the
+									 // value of the last iteration after the
+									 // loop
+	line_t* cur = &box->lines.arr[cur_i];	// line that we want to add to.
+											// Should have the value of the last
+											// iteration after the loop
+	const char* next_br;		// ptr to next '\n', or to the '\0' if there is
+								// no (further or at all)
+	int first = 1;
+	do {
+		next_br = strstr(str_part, "\n");
+		if (!next_br) {
+			// set next_br to NULL terminator of str in last iteration
+			next_br = str + len;
+		}
+
+		const size_t str_part_len = next_br - str_part;
+		if (first) {
+			first = 0;
+		} else {
+			// create new line
+			++cur_i;
+			line_t new_line_stack = {0};
+			if (dyn_arr_line_insert(&box->lines, new_line_stack, cur_i) 
+					== -1) {
+				free(suffix);
+				abort_model_change(box, MSG_ENOMEM);
+				return;
+			}
+			// init line
+			cur = &box->lines.arr[cur_i];
+			cur->vline_begin = 0;
+			cur->count_softbreaks = 0;
+			if (dyn_arr_char_create(str_part_len, 2, 1, &cur->string) 
+					== -1) {
+				free(suffix);
+				abort_model_change(box, MSG_ENOMEM);
+				return;
+			}
+		}
+		// append str_part (in all but the first this will be the entire
+		// line)
+		if (dyn_arr_char_add_all(&cur->string, str_part, str_part_len) 
+				== -1) {
+			free(suffix);
+			abort_model_change(box, MSG_ENOMEM);
+			return;
+		}
+		recalculate_vline_index(box, cur, 0);
+
+		str_part = next_br + 1;
+	} while (*next_br != '\0');
+
+	const size_t cursor_char_i = cur->string.count;
+	// add suffix to last line
+	if (dyn_arr_char_add_all(&cur->string, suffix, suffix_len) == -1) {
+		display_error(MSG_ENOMEM);
+	}
+
+	line_chi_t changes_begin = *cursor_pos;
+	if (changes_begin.char_i > 0) {
+		--changes_begin.char_i;
+	}
+	if (move_cursor) {
+		cursor_pos->line = cur_i;
+		cursor_pos->char_i = cursor_char_i;
+	}
+	update_changes_from(box, changes_begin);
+	
+	free(suffix);
+}
+
+static void abort_model_change(text_box_t* box, const char* msg) {
+	display_error(msg);
+	line_chi_t zero = { 0, 0 };
+	update_changes_from(box, zero);
+}
 
 /**
  * if the interaction_mode isn't CURSOR and editable isn't true, or if the box
@@ -959,7 +1060,7 @@ static void copy_selection(text_box_t* box) {
 	char* text = buf;
 	if (req_size > sizeof(buf)) {
 		char* tmp = (char*) malloc(req_size);
-		if (!tmp) {
+		if (!tmp && req_size > 0) {
 			display_error("Could not copy to clipboard: Not enough memory");
 			return;
 		}
@@ -976,11 +1077,16 @@ static void copy_selection(text_box_t* box) {
  * expects box to be in cursor mode and editable
  */
 static void paste_clipboard(text_box_t* box) {
+	const char* str;
 	if (clipboard_contents) {
-		Print((unsigned char*) clipboard_contents);
+		str = clipboard_contents;
 	} else {
-		Print((unsigned char*) "empty");
+		str = "";
 	}
+	if (box->cursor.visual_mode) {
+		delete_selection(box);
+	}
+	insert_string(box, str, 0);
 }
 
 static void delete_selection(text_box_t* box) {

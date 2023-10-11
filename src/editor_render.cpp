@@ -381,6 +381,12 @@ static void fill_linewise_with(const text_box_t* box, line_chi_t begin,
 	}
 
 	line_chi_t endi = line_chi_decrement(box, &end); // inclusive end
+	if (endi.char_i == box->lines.arr[endi.line].string.count 
+			&& endi.char_i > 0) {
+		// we don't want to print selection bg for the first char in new 
+		// line in case of cursor overflow
+		--endi.char_i;
+	}
 
 	if (!line_chi_to_char_point(box, endi, &end_cpt, 1)) {
 		end_cpt.x = 0;

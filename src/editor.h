@@ -253,7 +253,7 @@ int box_is_in_visual_mode(const text_box_t* box);
 size_t get_text_box_partial_string(const text_box_t* box, char buf[], 
 		size_t buf_size, line_chi_t* begin, line_chi_t* end);
 /**
- * end should not be (0, 0). end->line should be at most box->lines.count.
+ * lc should not be (0, 0). lc->line should be at most box->lines.count.
  * returns the decremented lc. If lc->char_i is 0, the decremented value will be
  * index of the char after the last char of the previous line. 
  */

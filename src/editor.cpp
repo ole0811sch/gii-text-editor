@@ -234,9 +234,6 @@ static void delete_range(text_box_t* box, const line_chi_t* begin,
 					end->char_i) == -1) {
 			display_fatal_error(MSG_ENOMEM);
 		}
-		box->cursor.position = *begin;
-		box->cursor.cursor_x_target = 0;
-		update_changes_from(box, *begin);
 	} else {
 		// remove suffix from first, concat first with suffix of last, then
 		// remove [begin->line + 1, end->line + 1) from box->lines.
@@ -255,11 +252,21 @@ static void delete_range(text_box_t* box, const line_chi_t* begin,
 					end->line + 1) == -1) {
 			display_fatal_error(MSG_ENOMEM);
 		}
-		box->cursor.position = *begin;
-		box->cursor.cursor_x_target = 0;
-		update_changes_from(box, *begin);
+	}
+
+	box->cursor.position = *begin;
+	box->cursor.cursor_x_target = 0;
+	line_chi_t changes_begin = *begin;
+	// in case be remove the last char left in a vline
+	if (begin->char_i != 0) {
+		--changes_begin.char_i;
+	}
+	update_changes_from(box, changes_begin);
+
+	if (first != last) {
 		box->redraw_areas.changes_end.line = box->lines.count;
 		box->redraw_areas.changes_end.char_i = 0;
+
 	}
 }
 
@@ -904,11 +911,6 @@ line_chi_t line_chi_decrement(const text_box_t* box, const line_chi_t* lc) {
 	if (lc->char_i == 0) {
 		--lci.line;
 		lci.char_i = box->lines.arr[lci.line].string.count;
-		// if lci points to an empty line, it will end up pointing to the
-		// non-existing char at index 0
-		if (lci.char_i > 0) {
-			--lci.char_i;
-		}
 	} else {
 		--lci.char_i;
 	}

@@ -12,14 +12,13 @@ static void print_char_xy(unsigned short offs_x, unsigned short offs_y,
 		unsigned char x, unsigned char y, char c, 
 		int negative);
 static void print_char(unsigned short offs_x, unsigned short offs_y, 
-char_point_t point, char c, char negative);
+		char_point_t point, char c, char negative);
 static int print_line(const text_box_t* box, size_t line_i);
 static int print_partial_line(const text_box_t* box, line_chi_t line_chi);
-static void print_cursor_at(const text_box_t* box, char_point_t point, int mode);
+static void print_cursor_at(const text_box_t* box, char_point_t point, 
+		int mode);
 static void clear_below_vline(const text_box_t* box, size_t vline);
 static void get_full_area(const text_box_t* box, DISPBOX* area);
-static int compare_lines_vline_begin(const void* vline_void, 
-		const line_t* other);
 static point_t char_point_to_point(const text_box_t* box, char_point_t point);
 static char line_chi_to_point(const text_box_t* box, line_chi_t line_chi, 
 		point_t* point);
@@ -146,19 +145,6 @@ void print_lines(const text_box_t* box) {
 	Bdisp_PutDispArea_DD(&area);
 }
 
-/**
- * vline_void is a pointer to a (size_t) vline.
- * returns sign(vline - other->vline_begin);
- */
-static int compare_lines_vline_begin(const void* vline_void, 
-		const line_t* other) {
-	size_t vline = *(size_t*) vline_void;
-	if (vline < other->vline_begin)
-		return -1;
-	else if (vline > other->vline_begin)
-		return 1;
-	return 0;
-}
 
 
 static void 

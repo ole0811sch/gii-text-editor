@@ -52,6 +52,7 @@ extern "C" {
 		GetKey(&(key));\
 } while(0)
 extern char dbg_buf[256];
+
 #else
 #define dbg_print(msg)
 #define dbg_print_xy(msg, x, y)

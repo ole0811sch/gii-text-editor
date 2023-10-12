@@ -223,3 +223,12 @@ int line_chi_equals(line_chi_t a, line_chi_t b) {
 	return a.line == b.line && a.char_i == b.char_i;
 }
 
+int compare_lines_vline_begin(const void* vline_void, 
+		const line_t* other) {
+	size_t vline = *(size_t*) vline_void;
+	if (vline < other->vline_begin)
+		return -1;
+	else if (vline > other->vline_begin)
+		return 1;
+	return 0;
+}

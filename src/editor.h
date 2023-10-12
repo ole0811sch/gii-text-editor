@@ -26,7 +26,9 @@ typedef enum editor_code {
 	CODE_RIGHT = -6,
 	CODE_TOGGLE_SELECTION = -7,
 	CODE_COPY = -8,
-	CODE_PASTE = -9
+	CODE_PASTE = -9,
+	CODE_PAGE_DOWN = -10,
+	CODE_PAGE_UP = -11,
 } editor_code_t;
 
 /* boundaries (inclusive) of the text box of the editor as pixel coordinates */
@@ -258,5 +260,6 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
  * index of the char after the last char of the previous line. 
  */
 line_chi_t line_chi_decrement(const text_box_t* box, const line_chi_t* lc);
+char* get_debug_representation_of_box(text_box_t* box);
 
 #endif

@@ -37,8 +37,8 @@ static text_box_t create_text_box(unsigned short left_px,
 		interaction_mode_t interaction_mode, 
 		char editable,
 		const char* text);
-static void scroll_up(text_box_t* box);
-static void scroll_down(text_box_t* box);
+static void scroll_up(text_box_t* box, size_t n);
+static void scroll_down(text_box_t* box, size_t n);
 static void handle_editor_code(text_box_t* box, editor_code_t code);
 static void start_selection(text_box_t* box);
 static void cancel_selection(text_box_t* box);
@@ -246,7 +246,7 @@ static void delete_range(text_box_t* box, const line_chi_t* begin,
 		}
 		for (size_t i = begin->line + 1;
 				i < end->line + 1 && i < box->lines.count; ++i) {
-			dyn_arr_char_destroy(&box->lines.arr[i].string);
+			destruct_line(&box->lines.arr[i]);
 		}
 		if (dyn_arr_line_remove_some(&box->lines, begin->line + 1, 
 					end->line + 1) == -1) {
@@ -367,6 +367,8 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 	if (dyn_arr_char_add_all(&cur->string, suffix, suffix_len) == -1) {
 		display_error(MSG_ENOMEM);
 	}
+	recalculate_vline_index(box, cur, cursor_char_i > 0 
+			? cursor_char_i - 1 : 0);
 
 	line_chi_t changes_begin = *cursor_pos;
 	if (changes_begin.char_i > 0) {
@@ -474,27 +476,27 @@ static int auto_scroll_down(text_box_t* box, size_t vline) {
 /**
  * updates box. If vvlines_begin is 0 already, nothing happens.
  */
-static void scroll_up(text_box_t* box) {
-	if (box->vvlines_begin == 0) {
-		return;
+static void scroll_up(text_box_t* box, size_t n) {
+	if (box->vvlines_begin < n) {
+		n = box->vvlines_begin;
 	}
 
-	--box->vvlines_begin;
+	box->vvlines_begin -= n;
 	box->redraw_areas.vvlines_begin_changed = 1;
 }
 
 /**
  * updates box. If vvlines_begin is 0 already, nothing happens.
  */
-static void scroll_down(text_box_t* box) {
+static void scroll_down(text_box_t* box, size_t n) {
 	line_t* last_line = DYN_ARR_LAST(&box->lines);
 	size_t last_vline = last_line->vline_begin + last_line->count_softbreaks;
 	size_t last_vvline = box->vvlines_begin + box->height - 1;
-	if (last_vvline >= last_vline) {
-		return;
+	if (last_vvline + n > last_vline) {
+		n = last_vline - last_vvline;
 	}
 
-	++box->vvlines_begin;
+	box->vvlines_begin += n;
 	box->redraw_areas.vvlines_begin_changed = 1;
 }
 
@@ -561,7 +563,7 @@ static void handle_cursor_move(text_box_t* box, editor_code_t move) {
 					box->cursor.position)) {
 			// fix the left margin of the first and previously first char of
 			// selection
-			if (move == CODE_UP || move == CODE_LEFT) {
+			if (move == CODE_UP || move == CODE_LEFT || move == CODE_PAGE_UP) {
 				// include previous first char of selection in changes since the
 				// left margin needs to be printed over 
 				line_t* old_line = &box->lines.arr[old_cursor.line];
@@ -616,56 +618,52 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	dyn_arr_line_t* lines = &box->lines;
 	line_t* current_line = &box->lines.arr[cursor_pos->line];
 
-	size_t count_softbreaks;
-	const size_t* vline_starts_old = // vline starts of old line of cursor
-		get_vline_starts(current_line, &count_softbreaks);
+	// index of new line
 	size_t new_line_i;
 	// offset of the vline of the new position relative to the line's
 	// vline_begin
 	size_t new_vline_offs; 
+	// alias for cursor_x_target in box
 	unsigned char* cursor_x_target = &box->cursor.cursor_x_target;
 	// visual cursor column
-	unsigned char x;
+	unsigned char target_x;
 
 	unsigned char current_x;
-	size_t current_vline = line_chi_to_vline(box, *cursor_pos, &current_x, 1);
-	if (move == CODE_UP) {
-		if (current_vline == current_line->vline_begin) { 
-			// in first vline of line
-			if (cursor_pos->line == 0)
-				return;
-			new_line_i = cursor_pos->line - 1;
-			new_vline_offs = lines->arr[new_line_i].count_softbreaks;
-			x = cursor_pos->char_i;
+	const size_t current_vline = 
+		line_chi_to_vline(box, *cursor_pos, &current_x, 1);
+	const size_t n = ((move == CODE_UP || move == CODE_DOWN) ? 1 : box->height);
+	size_t target_vline; // the vline index the cursor should be at
+	if (move == CODE_UP || move == CODE_PAGE_UP) {
+		if (current_vline == current_line->vline_begin 
+				&& cursor_pos->line == 0)
+			// we're in first of vline of box, do nothing
+			return;
+		// saturate target_vline at 0
+		if (current_vline < n) {
+			target_vline = 0;
+		} else {
+			target_vline = current_vline - n;
 		}
-		else { // we stay in the same line
-			new_line_i = cursor_pos->line;
-			x = current_x;
-			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
-				- 1;
-		}
-	}
-	else { // down
-		if (vline_starts_old == NULL || cursor_pos->char_i 
-				>= vline_starts_old[count_softbreaks - 1]) { 
-			// last vline of line
-			if (cursor_pos->line == lines->count - 1)
-				return;
-			new_line_i = cursor_pos->line + 1;
-			new_vline_offs = 0;
-			x = current_x;
-		}
-		else { // we stay in the same line
-			new_line_i = cursor_pos->line;
-			x = current_x;
-			new_vline_offs = current_vline - lines->arr[new_line_i].vline_begin 
-				+ 1;
+	} else {
+		const line_t* last_line = DYN_ARR_LAST(&box->lines);
+		const size_t last_vline =
+			last_line->vline_begin + last_line->count_softbreaks;
+		// saturate target_vline at last_vline
+		if (current_vline + n > last_vline) {
+			target_vline = last_vline;
+		} else {
+			target_vline = current_vline + n;
 		}
 	}
 
-	// tentatively set x to max(x, *cursor_x_target)
-	if (*cursor_x_target > x)
-		x = *cursor_x_target;
+	new_line_i = dyn_arr_line_bsearch_cb(&box->lines, 
+			&target_vline, &compare_lines_vline_begin);
+	new_vline_offs = target_vline - lines->arr[new_line_i].vline_begin;
+	target_x = current_x;
+
+	// tentatively set target_x to max(target_x, *cursor_x_target)
+	if (*cursor_x_target > target_x)
+		target_x = *cursor_x_target;
 
 	line_t* new_line = &lines->arr[new_line_i];
 	size_t count_softbreaks_new;
@@ -680,24 +678,24 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 		begin_i = vline_starts_new[new_vline_offs - 1];
 	// number of chars in vline
 	size_t vline_length = new_line->string.count - begin_i;
-	if (x >= vline_length) { // there is no char at x pos in the vline,
+	if (target_x >= vline_length) { // there is no char at x pos in the vline,
 		// cursor_pos->char_i is after last char in line
 		cursor_pos->char_i = new_line->string.count;
 		// store ideal column as cursor_x_target
 		if (vline_length < box->width) {
-			*cursor_x_target = x;
+			*cursor_x_target = target_x;
 		} else {
 			*cursor_x_target = 0;
 		}
 	}
 	else {
-		cursor_pos->char_i = begin_i + x;
+		cursor_pos->char_i = begin_i + target_x;
 	}
 
 	cursor_pos->line = new_line_i;
 	size_t cursor_vline = line_chi_to_vline(box, *cursor_pos, NULL, 1);
 
-	if (move == CODE_UP)
+	if (move == CODE_UP || move == CODE_PAGE_UP)
 		auto_scroll_up(box, cursor_vline);
 	else 
 		auto_scroll_down(box, cursor_vline);
@@ -777,6 +775,8 @@ static int key_code_to_ascii(text_box_t* box, unsigned int code) {
 	X(EXE, '\n') \
 	X(DEL, '\x08') \
 	X(F3, CODE_TOGGLE_SELECTION) \
+	X(F4, CODE_PAGE_UP) \
+	X(F5, CODE_PAGE_DOWN) \
 	X(CLIP, CODE_COPY) \
 	X(PASTE, CODE_PASTE)
 	signed char ch;
@@ -1009,7 +1009,8 @@ static void handle_editor_code(text_box_t* box, editor_code_t code) {
 		paste_clipboard(box);
 	} else if (box->interaction_mode == CURSOR) {
 		if (code == CODE_UP || code == CODE_LEFT 
-				|| code == CODE_DOWN || code == CODE_RIGHT) {
+				|| code == CODE_DOWN || code == CODE_RIGHT 
+				|| code == CODE_PAGE_UP || code == CODE_PAGE_DOWN) {
 			handle_cursor_move(box, code);
 		} else if (box->cursor.visual_mode) {
 			if (code == CODE_TOGGLE_SELECTION) {
@@ -1017,16 +1018,25 @@ static void handle_editor_code(text_box_t* box, editor_code_t code) {
 			} else if (code == CODE_COPY) {
 				copy_selection(box);
 			} 
-		} else {
-			if (code == CODE_TOGGLE_SELECTION) {
-				start_selection(box);
-			}
+		} else if (code == CODE_TOGGLE_SELECTION) {
+			start_selection(box);
 		}
 	} else {
-		if (code == CODE_UP) {
-			scroll_up(box);
-		} else if (code == CODE_DOWN) {
-			scroll_down(box);
+		switch (code) {
+			case CODE_UP:
+				scroll_up(box, 1);
+				break;
+			case CODE_DOWN:
+				scroll_down(box, 1);
+				break;
+			case CODE_PAGE_UP:
+				scroll_up(box, box->height);
+				break;
+			case CODE_PAGE_DOWN:
+				scroll_down(box, box->height);
+				break;
+			default:
+				break;
 		}
 	}
 }
@@ -1098,4 +1108,44 @@ static void delete_selection(text_box_t* box) {
 			&begin, &end);
 	delete_range(box, &begin, &end);
 	box->cursor.visual_mode = 0;
+}
+
+char* get_debug_representation_of_box(text_box_t* box) {
+	size_t len = 512 + 86 * box->lines.count;
+	char* str = (char*) malloc(len);
+	if (!str) {
+		return NULL;
+	}
+
+	char* cursor = str;
+	cursor += sprintf(cursor, "{\n\tvvlines_begin: %lu,\n", box->vvlines_begin);
+	if (box->interaction_mode == CURSOR) {
+		cursor += sprintf(cursor, 
+				"\tcursor: {\n\t\tposition (l, c): %lu, %lu\n\t},\n", 
+				box->cursor.position.line, box->cursor.position.char_i);
+	}
+	cursor += sprintf(cursor, "\tlines: {\n\t\tarr: [\n");
+	for (size_t i = 0; i < box->lines.count; ++i) {
+		cursor += sprintf(cursor, "\t\t\t{\n\t\t\t\tvline_begin: %lu,\n", 
+				box->lines.arr[i].vline_begin);
+		size_t count_sbs;
+		const size_t* vline_starts = get_vline_starts(&box->lines.arr[i],
+				&count_sbs);
+		cursor += sprintf(cursor, "\t\t\t\tcount_softbreaks: %lu,\n", count_sbs);
+		cursor += sprintf(cursor, "\t\t\t\tstring.count: %lu,\n", 
+				box->lines.arr[i].string.count);
+		cursor += sprintf(cursor, "\t\t\t\tvline_index: [");
+		for (size_t j = 0; j < count_sbs; ++j) {
+			cursor += sprintf(cursor, "%lu, ", vline_starts[j]);
+		}
+		cursor += sprintf(cursor, "]\n\t\t\t},\n");
+	}
+	cursor += sprintf(cursor, "\t\t]\n\t}\n");
+	cursor += sprintf(cursor, "}\n");
+	if (strlen(str) >= len) {
+		sprintf(dbg_buf, "Debug buffer too small: %lu, %lu\n", 
+				strlen(str), len);
+		display_fatal_error(dbg_buf);
+	}
+	return str;
 }

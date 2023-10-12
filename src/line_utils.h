@@ -35,5 +35,10 @@ void line_chi_min_max(const line_chi_t* a, const line_chi_t* b, line_chi_t* min,
 		line_chi_t* max);
 int line_chi_greater_than(line_chi_t a, line_chi_t b);
 int line_chi_equals(line_chi_t a, line_chi_t b);
-
+/**
+ * vline_void is a pointer to a (size_t) vline.
+ * returns sign(vline - other->vline_begin);
+ */
+int compare_lines_vline_begin(const void* vline_void, 
+		const line_t* other);
 #endif // LINE_UTILS_H_

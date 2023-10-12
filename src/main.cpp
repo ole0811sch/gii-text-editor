@@ -582,7 +582,7 @@ static const char* str2 = "#include 'fxlib.h'\n"
 "\n"
 "\n";
 static const char* char_set = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL"
-	"MNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c";
+	"MNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c\n";
 static const char* str = "\
 #include <stdio.h>\n\
 int main(void) {\n\
@@ -629,10 +629,24 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 	if (setjmp(error_jmp))
 		return 0;
 
-	unsigned int escape_keys_main[2] = { KEY_CTRL_F1, KEY_CTRL_F2 };
+	unsigned int escape_keys_main[] = { KEY_CTRL_F1, KEY_CTRL_F2, KEY_CTRL_F6 };
 	text_box_t box;
 	initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, 
-			CURSOR, 1, char_set, &box);
+			CURSOR, 1, str2, &box);
+
+#if 0
+	size_t req_size = get_text_box_string(&box, NULL, 0) + 1;
+	char* restr = (char*) malloc(req_size);
+	if (!restr) {
+		display_fatal_error(MSG_ENOMEM);
+	}
+	get_text_box_string(&box, restr, req_size);
+
+	destruct_text_box(&box);
+	initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, 
+			CURSOR, 1, restr, &box);
+#endif
+
 	while (1) {
 		draw_text_box(&box);
 		unsigned int res = focus_text_box(&box, escape_keys_main, 
@@ -645,8 +659,18 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 			draw_text_box(&help_box);
 			focus_text_box(&help_box, escape_keys_help, 1);
 		}
-		else {
+		else if (res == KEY_CTRL_F2) {
 			open_command_line(&box);
+		} else if (res == KEY_CTRL_F6) {
+			unsigned int escape_keys_help[1] = { KEY_CTRL_EXIT };
+			text_box_t debug_box;
+			char* dbg_info = get_debug_representation_of_box(&box);
+			if (dbg_info)
+				initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, SCROLL,
+						1, dbg_info, &debug_box);
+			free(dbg_info);
+			draw_text_box(&debug_box);
+			focus_text_box(&debug_box, escape_keys_help, 1);
 		}
 	}
 	return 1;

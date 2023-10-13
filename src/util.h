@@ -16,6 +16,8 @@ extern "C" {
 #define BOTTOM 63
 #define RIGHT 127
 #define EVAL(x) x
+#define SCND_ARG(x, y) y
+#define FIRST_ARG(x, y) x
 #define ARR_LEN(arr) (sizeof(arr)/sizeof((arr)[0]))
 #define MAX(dest, a, b) do {\
 		if (a > b) *dest = a; else *dest = b; \

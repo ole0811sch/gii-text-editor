@@ -39,7 +39,10 @@
  * like the standard implementation, which is the default. If one is defined,
  * all need to be defined.
  *
- * None of the configuration macros will be undefined after the header.
+ * DYN_ARR_CG_GROWTH_NUMERATOR and 
+ * DYN_ARR_CG_GROWTH_DENOMINATOR (optional): the next bigger 
+ * capacity nc is calculated as old_capacity * ...NUMERATOR / ...DENOMINATOR
+ * (default 2 and 1).
  *
  * Example usage:
  *
@@ -120,6 +123,13 @@
 #define DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 4
 #endif // DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
 
+#ifndef DYN_ARR_CG_GROWTH_NUMERATOR 
+#define DYN_ARR_CG_GROWTH_NUMERATOR 3
+#endif // DYN_ARR_CG_GROWTH_NUMERATOR 
+#ifndef DYN_ARR_CG_GROWTH_DENOMINATOR 
+#define DYN_ARR_CG_GROWTH_DENOMINATOR 4
+#endif // DYN_ARR_CG_GROWTH_DENOMINATOR 
+
 #define PFX DYN_ARR_CG_STATIC
 
 #ifndef DYN_ARR_H_
@@ -143,17 +153,13 @@ typedef struct {
 	DYN_ARR_CG_TYPE* arr;
 	size_t capacity;
 	size_t count;
-	unsigned char growth_factor_denominator, growth_factor_numerator;
 } DYN_ARR_T;
 
 /**
  * name: dyn_arr_$type_create
  * returns 0 on success, -1 if it could not allocate the array.
  */
-PFX int DYN_ARR_CREATE(size_t initial_capacity, 
-		unsigned char growth_factor_numerator, 
-		unsigned char growth_factor_denominator,
-		DYN_ARR_T* dyn_arr);
+PFX int DYN_ARR_CREATE(size_t initial_capacity, DYN_ARR_T* dyn_arr);
 
 /**
  * name: dyn_arr_$type_insert
@@ -171,12 +177,15 @@ PFX int DYN_ARR_INSERT(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element,
 PFX int DYN_ARR_INSERT_SOME(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr,
 		size_t n, size_t index);
 
+
 /**
  * name: dyn_arr_$type_add
  * returns 0 on success, -1 if it needed to grow the array and could not 
  * reallocate the array. In this case the operation had no effect.
  */
 PFX int DYN_ARR_ADD(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element);
+
+
 
 /**
  * name: dyn_arr_$type_add_all
@@ -196,6 +205,7 @@ PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr,
  */
 PFX int DYN_ARR_ENSURE_CAPACITY(DYN_ARR_T* dyn_arr, size_t cap);
 
+
 /**
  * name: dyn_arr_$type_remove
  * returns 0 on success, -1 if it tried to shrink the array and could not 
@@ -203,12 +213,14 @@ PFX int DYN_ARR_ENSURE_CAPACITY(DYN_ARR_T* dyn_arr, size_t cap);
  */
 PFX int DYN_ARR_REMOVE(DYN_ARR_T* dyn_arr, size_t index);
 
+
 /**
  * name: dyn_arr_$type_pop
  * returns 0 on success, -1 if it tried to shrink the array and could not 
  * reallocate the array. In this case the operation had no effect.
  */
 PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr);
+
 
 /**
  * name: dyn_arr_$type_pop_some
@@ -218,6 +230,8 @@ PFX int DYN_ARR_POP(DYN_ARR_T* dyn_arr);
  * to shrink the dyn_arr.
  */
 PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n);
+
+
 
 /**
  * name: dyn_arr_$type_remove
@@ -229,6 +243,7 @@ PFX int DYN_ARR_POP_SOME (DYN_ARR_T* dyn_arr, size_t n);
  * @param end_i end of range to delete (exclusive)
  */
 PFX int DYN_ARR_REMOVE_SOME(DYN_ARR_T* dyn_arr, size_t start_i, size_t end_i);
+
 
 /**
  * name: dyn_arr_$type_destroy
@@ -312,12 +327,11 @@ PFX size_t DYN_ARR_RAW_BSEARCH_CB(const DYN_ARR_CG_TYPE* arr, size_t n,
 #include <string.h>
 
 static int _DYN_ARR_EXTEND(DYN_ARR_T* dyn_arr);
+
 static int _DYN_ARR_SHRINK(DYN_ARR_T* dyn_arr);
 
-PFX int DYN_ARR_CREATE(size_t initial_capacity, 
-		unsigned char growth_factor_numerator, 
-		unsigned char growth_factor_denominator,
-		DYN_ARR_T* dyn_arr) {
+
+PFX int DYN_ARR_CREATE(size_t initial_capacity, DYN_ARR_T* dyn_arr) {
 	DYN_ARR_CG_TYPE* arr = (DYN_ARR_CG_TYPE*) DYN_ARR_CG_MALLOC(initial_capacity 
 			* sizeof(DYN_ARR_CG_TYPE));
 	if (initial_capacity > 0 && arr == NULL)
@@ -326,8 +340,6 @@ PFX int DYN_ARR_CREATE(size_t initial_capacity,
 	dyn_arr->arr = arr,
 	dyn_arr->capacity = initial_capacity;
 	dyn_arr->count = 0;
-	dyn_arr->growth_factor_denominator = growth_factor_denominator;
-	dyn_arr->growth_factor_numerator = growth_factor_numerator;
 	return 0;
 }
 
@@ -343,21 +355,24 @@ static int _DYN_ARR_CHANGE_SIZE(DYN_ARR_T* dyn_arr, size_t new_capacity) {
 }
 
 static int _DYN_ARR_EXTEND(DYN_ARR_T* dyn_arr) {
-	size_t capacity = dyn_arr->capacity * dyn_arr->growth_factor_numerator 
-			/ dyn_arr->growth_factor_denominator;
+
+
+	size_t capacity = dyn_arr->capacity * DYN_ARR_CG_GROWTH_NUMERATOR 
+			/ DYN_ARR_CG_GROWTH_DENOMINATOR;
 	if (capacity <= dyn_arr->capacity)
 		capacity = dyn_arr->capacity + 1;
 	return _DYN_ARR_CHANGE_SIZE(dyn_arr, capacity);
 }
 
 static int _DYN_ARR_SHRINK(DYN_ARR_T* dyn_arr) {
-	size_t capacity = dyn_arr->capacity * dyn_arr->growth_factor_denominator 
-			/ dyn_arr->growth_factor_numerator;
+	size_t capacity = dyn_arr->capacity * DYN_ARR_CG_GROWTH_DENOMINATOR 
+			/ DYN_ARR_CG_GROWTH_NUMERATOR;
 	return _DYN_ARR_CHANGE_SIZE(dyn_arr, capacity);
 }
 
 PFX int DYN_ARR_INSERT(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element,
 		size_t index) {
+
 	if (dyn_arr->count == dyn_arr->capacity 
 			&& _DYN_ARR_EXTEND(dyn_arr) == -1)
 		return -1;
@@ -373,6 +388,7 @@ PFX int DYN_ARR_INSERT(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element,
 
 PFX int DYN_ARR_INSERT_SOME(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr, 
 		size_t n, size_t index) {
+
 	if (n == 0) {
 		return 0;
 	}
@@ -395,6 +411,7 @@ PFX int DYN_ARR_INSERT_SOME(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr,
 }
 
 PFX int DYN_ARR_ADD(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
+
 	if (dyn_arr->count == dyn_arr->capacity 
 			&& _DYN_ARR_EXTEND(dyn_arr) == -1)
 		return -1;
@@ -405,11 +422,12 @@ PFX int DYN_ARR_ADD(DYN_ARR_T* dyn_arr, DYN_ARR_CG_TYPE element) {
 }
 
 PFX int DYN_ARR_ENSURE_CAPACITY(DYN_ARR_T* dyn_arr, size_t cap) {
+
 	if (cap > dyn_arr->capacity) {
 		size_t new_capacity = dyn_arr->capacity;
 		while (cap > new_capacity) {
-			size_t new_capacity_2 = new_capacity * dyn_arr
-				->growth_factor_numerator / dyn_arr->growth_factor_denominator;
+			size_t new_capacity_2 = new_capacity * DYN_ARR_CG_GROWTH_NUMERATOR 
+				/ DYN_ARR_CG_GROWTH_DENOMINATOR;
 			if (new_capacity_2 <= new_capacity)
 				++new_capacity;
 			else
@@ -423,6 +441,7 @@ PFX int DYN_ARR_ENSURE_CAPACITY(DYN_ARR_T* dyn_arr, size_t cap) {
 
 PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr, 
 		size_t n) {
+
 	size_t required_capacity = dyn_arr->count + n;
 	if (DYN_ARR_ENSURE_CAPACITY(dyn_arr, required_capacity) == -1) {
 		return -1;
@@ -435,7 +454,7 @@ PFX int DYN_ARR_ADD_ALL(DYN_ARR_T* dyn_arr, const DYN_ARR_CG_TYPE* arr,
 
 PFX int _DYN_ARR_MAYBE_SHRINK(DYN_ARR_T* dyn_arr) {
 	size_t next_capacity = dyn_arr->capacity 
-		* dyn_arr->growth_factor_denominator / dyn_arr->growth_factor_numerator;
+		* DYN_ARR_CG_GROWTH_DENOMINATOR / DYN_ARR_CG_GROWTH_NUMERATOR;
 	if (next_capacity * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
 			/ DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR > dyn_arr->count 
 			&& _DYN_ARR_SHRINK(dyn_arr) == -1)
@@ -470,8 +489,8 @@ PFX int DYN_ARR_POP_SOME(DYN_ARR_T* dyn_arr, size_t n) {
 	size_t capacity;
 	do {
 		capacity = next_capacity;
-		next_capacity = capacity * dyn_arr->growth_factor_denominator 
-			/ dyn_arr->growth_factor_numerator;
+		next_capacity = capacity * DYN_ARR_CG_GROWTH_DENOMINATOR 
+			/ DYN_ARR_CG_GROWTH_NUMERATOR;
 	} while (next_capacity * DYN_ARR_CG_SHRINK_THRESHOLD_NUMERATOR 
 						/ DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
 						> dyn_arr->count);

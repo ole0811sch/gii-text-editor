@@ -261,5 +261,10 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
  */
 line_chi_t line_chi_decrement(const text_box_t* box, const line_chi_t* lc);
 char* get_debug_representation_of_box(text_box_t* box);
+/**
+ * fills box->lines with str. box->lines should be uninitialized at this
+ * point.
+ */
+void initialize_lines(text_box_t* box, const char* str);
 
 #endif

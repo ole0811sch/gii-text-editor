@@ -1,7 +1,10 @@
+#include <stdlib.h>
+
 #include "editor_render.h"
 #include "editor.h"
 #include "fxlib.h"
 #include "line_utils.h"
+#include "util.h"
 
 /**
  * Unless stated otherwise, functions only update VRAM, not DD.
@@ -275,8 +278,17 @@ static int print_partial_line(const text_box_t* box, line_chi_t line_chi) {
 		vline = box->vvlines_begin;
 		x = 0;
 		// find new starting index
-		const size_t* vline_starts = get_vline_starts(line, NULL);
-		char_i = vline_starts[vline - line->vline_begin - 1];
+		size_t count_softbreaks;
+		const unsigned char* vline_lens 
+			= get_vline_lens(line, &count_softbreaks);
+		size_t* vline_starts = (size_t*) malloc((count_softbreaks + 1) 
+				* sizeof(size_t));
+		if (!vline_starts) {
+			display_fatal_error(MSG_ENOMEM);
+		}
+		vline_lens_to_starts(vline_lens, vline_starts, count_softbreaks);
+		char_i = vline_starts[vline - line->vline_begin];
+		free(vline_starts);
 	}
 	else
 		char_i = line_chi.char_i;

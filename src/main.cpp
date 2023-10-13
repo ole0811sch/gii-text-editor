@@ -665,12 +665,16 @@ int AddIn_main(int isAppli, unsigned short OptionNum)
 			unsigned int escape_keys_help[1] = { KEY_CTRL_EXIT };
 			text_box_t debug_box;
 			char* dbg_info = get_debug_representation_of_box(&box);
+			destruct_text_box(&box);
 			if (dbg_info)
 				initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, SCROLL,
 						1, dbg_info, &debug_box);
 			free(dbg_info);
 			draw_text_box(&debug_box);
 			focus_text_box(&debug_box, escape_keys_help, 1);
+			destruct_text_box(&debug_box);
+			initialize_text_box(0, 0, EDITOR_COLUMNS, EDITOR_LINES, 
+					CURSOR, 1, "Box was destroyed", &box);
 		}
 	}
 	return 1;

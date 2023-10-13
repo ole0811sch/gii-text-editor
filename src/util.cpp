@@ -1,6 +1,7 @@
 #include <setjmp.h>
 #include <stddef.h>
 #include <keybios.h>
+#include <stdlib.h>
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -3,7 +3,7 @@
 
 #include "dyn_arrs.h"
 
-#define VLINE_INDEX_STATIC_ARR_SIZE 4
+#define VLINE_INDEX_STATIC_ARR_SIZE sizeof(void*)
 
 /**
  * stores any number of size_t values. If they're at most 
@@ -11,8 +11,8 @@
  * a dynamic array.
  */
 typedef union {
-	size_t s_arr[VLINE_INDEX_STATIC_ARR_SIZE];
-	dyn_arr_size_t d_arr;
+	unsigned char s_arr[VLINE_INDEX_STATIC_ARR_SIZE];
+	dyn_arr_uchar_t* d_arr;
 } vline_index_t;
 
 typedef struct {
@@ -40,11 +40,15 @@ typedef struct {
 
 void destruct_line(line_t* line);
 
+#define DYN_ARR_CG_GROWTH_NUMERATOR 5
+#define DYN_ARR_CG_GROWTH_DENOMINATOR 4
 #undef DYN_ARR_H_
 #define DYN_ARR_CG_TYPE line_t
 #define DYN_ARR_CG_SUFFIX line
 #include "dyn_arr.h"
 #undef DYN_ARR_CG_SUFFIX
 #undef DYN_ARR_CG_TYPE
+#undef DYN_ARR_CG_GROWTH_NUMERATOR
+#undef DYN_ARR_CG_GROWTH_DENOMINATOR
 
 #endif // LINE_H_

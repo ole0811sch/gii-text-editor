@@ -9,7 +9,6 @@ public class Main {
 	private static int SCREEN_WIDTH;
 	private static int SCREEN_HEIGHT;
 	private static final int[] keycode_seq = new int[]{ 
-		KeyBios.KEY_CTRL_F6_,
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_DOWN_,
 		KeyBios.KEY_CTRL_DOWN_,

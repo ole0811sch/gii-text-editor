@@ -603,17 +603,7 @@ eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n\
 \n\
 Maecenas pellentesque magna in condimentum laoreet. Ut venenatis justo non libero porttitor rhoncus non ut arcu. Aliquam venenatis sed mi id iaculis. Suspendisse vel ligula laoreet, iaculis libero vel, egestas nunc. Fusce eget viverra dolor. Quisque sodales molestie elit, ut condimentum dui consequat in. Pellentesque in sodales ex. Nullam consectetur iaculis lectus. Nam vitae molestie justo. Ut dignissim lorem justo, ac ullamcorper nisi vehicula at. Cras non sollicitudin felis. ";
 
-#ifdef TEST_MODE
-int main(void) {
-	if (test_parse_cli()) {
-		puts("Tests succeeded");
-	} 
-	else {
-		puts("Tests failed");
-	}
-	return 0;
-}
-#elif defined(MOCKUP)
+#if defined(MOCKUP) && !defined(TEST_MODE)
 int main(int argc, char** argv) {
 	if (argc != 2) {
 		puts("Please supply the path to the jar");

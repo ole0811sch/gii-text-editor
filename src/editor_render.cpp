@@ -67,7 +67,7 @@ void redraw_changes(const text_box_t* box) {
 				break;
 		}
 		size_t new_last_vline = DYN_ARR_LAST(&box->lines)->vline_begin 
-			+ DYN_ARR_LAST(&box->lines)->count_softbreaks;
+			+ count_softbreaks(box, DYN_ARR_LAST(&box->lines));
 		// in case there's still old stuff on the screen
 		clear_below_vline(box, new_last_vline);
 		point_t begin;
@@ -254,11 +254,12 @@ static int print_line(const text_box_t* box, size_t line_i) {
  * currently visible, otherwise returns 0.
  */
 static int print_partial_line(const text_box_t* box, line_chi_t line_chi) {
-	const dyn_arr_line_t* lines = &box->lines;
-	const line_t* line = &lines->arr[line_chi.line];
+	const dyn_arr_line_t* const lines = &box->lines;
+	const line_t* const  line = &lines->arr[line_chi.line];
+	const size_t line_count_softbreaks = count_softbreaks(box, line);
 	// exclusive, end of the visible vlines of this line
 	size_t vvlines_local_end;	
-	vvlines_local_end = line->vline_begin + line->count_softbreaks + 1;
+	vvlines_local_end = line->vline_begin + line_count_softbreaks + 1;
 
 	if (vvlines_local_end > box->vvlines_begin + box->height) 
 		// line ends outside of visible area
@@ -270,7 +271,7 @@ static int print_partial_line(const text_box_t* box, line_chi_t line_chi) {
 	unsigned char x;
 	size_t vline = line_chi_to_vline(box, line_chi, &x, 1); 
 	if (vline < box->vvlines_begin) {
-		if (line->vline_begin + line->count_softbreaks < box->vvlines_begin)
+		if (line->vline_begin + line_count_softbreaks < box->vvlines_begin)
 			// even last vline of line isn't visible, nothing to print
 			return 0;
 		// first vline is before vvlines_begin, last is not
@@ -278,31 +279,27 @@ static int print_partial_line(const text_box_t* box, line_chi_t line_chi) {
 		vline = box->vvlines_begin;
 		x = 0;
 		// find new starting index
-		size_t count_softbreaks;
-		const unsigned char* vline_lens 
-			= get_vline_lens(line, &count_softbreaks);
-		size_t* vline_starts = (size_t*) malloc((count_softbreaks + 1) 
-				* sizeof(size_t));
-		if (!vline_starts) {
-			display_fatal_error(MSG_ENOMEM);
-		}
-		vline_lens_to_starts(vline_lens, vline_starts, count_softbreaks);
-		char_i = vline_starts[vline - line->vline_begin];
-		free(vline_starts);
+		char_i = vline_offset_to_char_i(box, line, vline - line->vline_begin);
 	}
 	else
 		char_i = line_chi.char_i;
 
 
 	// print chars of each vline 
-	while (char_i < line->string.count && vline < vvlines_local_end) {
+
+	int last_char_was_read = 0;
+	while (line->str
+			&& !last_char_was_read 
+			&& is_line_end(line->str[char_i]) != AFTER_LINE_END 
+			&& vline < vvlines_local_end) {
+		last_char_was_read = (is_line_end(line->str[char_i]) == LAST_CHAR);
 		if (x >= box->width) { // next vline
 			x = 0;
 			++vline;
 			continue;
 		}
 		print_char_xy(box->left_px, box->top_px, x, vline 
-				- box->vvlines_begin, line->string.arr[char_i],
+				- box->vvlines_begin, line->str[char_i] & ~0x80,
 				in_selection(box, line_chi.line, char_i));
 		++char_i;
 		++x;
@@ -379,8 +376,8 @@ static void fill_linewise_with(const text_box_t* box, line_chi_t begin,
 	}
 
 	line_chi_t endi = line_chi_decrement(box, &end); // inclusive end
-	if (endi.char_i == box->lines.arr[endi.line].string.count 
-			&& endi.char_i > 0) {
+	if (endi.char_i >= find_line_len(&box->lines.arr[endi.line])
+				&& endi.char_i > 0) {
 		// we don't want to print selection bg for the first char in new 
 		// line in case of cursor overflow
 		--endi.char_i;

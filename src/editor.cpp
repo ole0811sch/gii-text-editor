@@ -161,7 +161,7 @@ static text_box_t create_text_box(unsigned short left_px,
 
 void initialize_lines(text_box_t* box, const char* str) {
 	if(dyn_arr_line_create(10, &box->lines) == -1)
-		display_fatal_error("Out of memory");
+		display_fatal_error(MSG_ENOMEM);
 
 	add_new_line(box, 0);
 
@@ -174,72 +174,44 @@ void initialize_lines(text_box_t* box, const char* str) {
 	dyn_arr_line_t* lines = &box->lines;
 	line_t* current_line = DYN_ARR_LAST(lines);
 	unsigned char col = 0;
+	size_t next_vline_begin = 0;
 	size_t vline = 0;
 	size_t i = 0;
 	size_t line_starting_index = 0; // index of the first char in str in line
-	for (; str[i]; ++i) {
-		if (str[i] == '\n') {
-			++vline;
-			line_starting_index = i + 1;
-			add_new_line(box, vline);
+	for (;; ++i) {
+		if (str[i] == '\0' || str[i] == '\n') {
+			add_new_line(box, next_vline_begin);
 			current_line = DYN_ARR_LAST(lines);
+			size_t len = i - line_starting_index;
+			if (len > 0) {
+				current_line->str = (char*) malloc(len);
+				if (!current_line->str) {
+					display_fatal_error(MSG_ENOMEM);
+				}
+				memcpy(current_line->str, &str[line_starting_index], len);
+				current_line->str[len - 1] |= 0x80;
+			}
+			if (str[i] == '\0') {
+				break;
+			}
+			
+			++vline;
+			next_vline_begin = vline;
+			line_starting_index = i + 1;
 			col = 0;
 		} 
 		else {
-			// only check if col is out of bounds before adding new char. This
-			// prevents unnecessary soft breaks before '/n' and EOF
+			// only check if col is out of bounds before reading new char. This
+			// prevents unnecessary soft breaks before '\n' and EOF
 			if (col >= EDITOR_COLUMNS) { 
 				col = 0;
 				++vline;
-				add_softbreak_to_index(current_line, i - line_starting_index);
 			}
-			dyn_arr_char_add(&current_line->string, str[i]);
 			++col;
 		}
 	}
 #endif
 #undef A
-}
-
-/**
- * Expect box to be editable and in cursor mode
- */
-static void insert_line_break(text_box_t* box) {
-	dyn_arr_line_t* lines = &box->lines;
-	line_chi_t* cursor_pos = &box->cursor.position;
-
-	// insert new line
-	line_t uninitialized = {0};
-	dyn_arr_line_insert(lines, uninitialized, cursor_pos->line + 1);
-	line_t* line = &lines->arr[cursor_pos->line];
-	line_t* new_line = &lines->arr[cursor_pos->line + 1];
-	new_line->count_softbreaks = 0;
-	new_line->vline_begin = 0;
-	dyn_arr_char_create(0, &new_line->string);
-	
-	size_t transfer_count = line->string.count - cursor_pos->char_i;
-	// copy chars from old line
-	dyn_arr_char_add_all(&new_line->string, 
-			&line->string.arr[cursor_pos->char_i], transfer_count);
-
-	// calculate vline_index
-	recalculate_vline_index(box, new_line, 0);
-
-	// remove chars from old line
-	dyn_arr_char_pop_some(&line->string, transfer_count);
-
-	line_chi_t changes_begin = { cursor_pos->line, cursor_pos->char_i };
-	// this is necessary because the x value can be 0 and after a softbreak. 
-	// update_changes_from would
-	// then only start in the vline after that, even though we also need to
-	// remove the vline of the cursor position
-	if (changes_begin.char_i > 0)
-		--changes_begin.char_i;
-	++cursor_pos->line;
-	cursor_pos->char_i = 0;
-	update_changes_from(box, changes_begin);
-
-	box->cursor.cursor_x_target = 0;
 }
 
 /**
@@ -270,21 +242,22 @@ static void delete_range(text_box_t* box, const line_chi_t* begin,
 	line_t* last = &box->lines.arr[end->line]; // line containing suffix to
 											   // concat the prefix of first 
 											   // with
+	size_t first_len = find_line_len(first);
+	size_t last_len = find_line_len(last);
 	if (first == last) {
 		// simple case, just remove the chars from that line since we don't need
 		// to merge lines
-		if (dyn_arr_char_remove_some(&first->string, begin->char_i, 
+		if (line_remove_some(first, begin->char_i, 
 					end->char_i) == -1) {
 			display_fatal_error(MSG_ENOMEM);
 		}
 	} else {
 		// remove suffix from first, concat first with suffix of last, then
 		// remove [begin->line + 1, end->line + 1) from box->lines.
-		if (dyn_arr_char_remove_some(&first->string, begin->char_i, 
-					first->string.count) == -1
-				|| dyn_arr_char_add_all(&first->string, 
-					&last->string.arr[end->char_i],
-					last->string.count - end->char_i) == -1) {
+		if (line_remove_some(first, begin->char_i, 
+					first_len) == -1
+				|| line_add_all(first, &last->str[end->char_i],
+					last_len - end->char_i) == -1) {
 			display_fatal_error(MSG_ENOMEM);
 		}
 		for (size_t i = begin->line + 1;
@@ -337,14 +310,14 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 	// the strings between the linebreaks in str to the current line. After
 	// the str has been completely added, append the old suffix from the
 	// first line to the current line
-	const size_t suffix_len = line->string.count - cursor_pos->char_i;
+	const size_t suffix_len = find_line_len(line) - cursor_pos->char_i;
 	char* suffix = (char*) malloc(suffix_len);
 	if (!suffix && suffix_len > 0) {
 		display_error(MSG_ENOMEM);
 		return;
 	}
-	memcpy(suffix, &line->string.arr[cursor_pos->char_i], suffix_len);
-	if (dyn_arr_char_pop_some(&line->string, suffix_len) == -1) {
+	memcpy(suffix, &line->str[cursor_pos->char_i], suffix_len);
+	if (line_pop_some(line, suffix_len) == -1) {
 		display_error(MSG_ENOMEM);
 		free(suffix);
 		line_chi_t zero = { 0, 0 };
@@ -363,11 +336,13 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 	const char* next_br;		// ptr to next '\n', or to the '\0' if there is
 								// no (further or at all)
 	int first = 1;
+	int reached_end = 0; 	// set to 1 to end after iteration
 	do {
 		next_br = strstr(str_part, "\n");
 		if (!next_br) {
-			// set next_br to NULL terminator of str in last iteration
+			// set next_br to char after last char of str in last iteration
 			next_br = str + len;
+			reached_end = 1;
 		}
 
 		const size_t str_part_len = next_br - str_part;
@@ -386,8 +361,10 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 			// init line
 			cur = &box->lines.arr[cur_i];
 			cur->vline_begin = 0;
-			cur->count_softbreaks = 0;
-			if (dyn_arr_char_create(str_part_len, &cur->string) == -1) {
+			cur->str = NULL;
+			size_t new_cap;
+			if (line_ensure_capacity(line, 0, 0, str_part_len, &new_cap) 
+					== -1) {
 				free(suffix);
 				abort_model_change(box, MSG_ENOMEM);
 				return;
@@ -395,31 +372,20 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 		}
 		// append str_part (in all but the first this will be the entire
 		// line)
-		if (dyn_arr_char_add_all(&cur->string, str_part, str_part_len) 
-				== -1) {
+		if (line_add_all(cur, str_part, str_part_len) == -1) {
 			free(suffix);
 			abort_model_change(box, MSG_ENOMEM);
 			return;
 		}
-		recalculate_vline_index(box, cur, 0);
 
 		str_part = next_br + 1;
-	} while (*next_br != '\0');
+	} while (!reached_end);
 
-	const size_t cursor_char_i = cur->string.count;
+	const size_t cursor_char_i = find_line_len(cur);
 	// add suffix to last line
-	if (dyn_arr_char_add_all(&cur->string, suffix, suffix_len) == -1) {
+	if (line_add_all(cur, suffix, suffix_len) == -1) {
 		display_error(MSG_ENOMEM);
 	}
-
-	size_t vline_before_suffix;
-	if (cursor_char_i > 0) {
-		line_chi_t tmp = { cur_i, cursor_char_i - 1 };
-		vline_before_suffix = line_chi_to_vline(box, tmp, NULL, 0);
-	} else {
-		vline_before_suffix = 0;
-	}
-	recalculate_vline_index(box, cur, vline_before_suffix);
 
 	line_chi_t changes_begin = *cursor_pos;
 	if (changes_begin.char_i > 0) {
@@ -450,9 +416,6 @@ static void handle_char(text_box_t* box, char c) {
 		return;
 
 	switch(c) {
-		case '\n': 
-			insert_line_break(box);
-			break;
 		case '\x08':
 			if (box_is_in_visual_mode(box)) {
 				delete_selection(box);
@@ -494,7 +457,7 @@ static int auto_scroll_up_simple(text_box_t* box, size_t vline) {
 static int auto_scroll_up(text_box_t* box, size_t vline) {
 	line_t* last_line = DYN_ARR_LAST(&box->lines);
 	size_t last_vvline = last_line->vline_begin 
-		+ last_line->count_softbreaks;
+		+ count_softbreaks(box, last_line);
 	if (last_vvline < vline) {
 		last_vvline = vline;
 	}
@@ -541,7 +504,8 @@ static void scroll_up(text_box_t* box, size_t n) {
  */
 static void scroll_down(text_box_t* box, size_t n) {
 	line_t* last_line = DYN_ARR_LAST(&box->lines);
-	size_t last_vline = last_line->vline_begin + last_line->count_softbreaks;
+	size_t last_vline = last_line->vline_begin 
+		+ count_softbreaks(box, last_line);
 	size_t last_vvline = box->vvlines_begin + box->height - 1;
 	if (last_vvline + n > last_vline) {
 		if (last_vline < last_vvline) {
@@ -578,8 +542,8 @@ static void handle_cursor_move(text_box_t* box, editor_code_t move) {
 				--cursor_pos->char_i;
 			} else if (cursor_pos->line > 0) {
 				--cursor_pos->line;
-				cursor_pos->char_i = box->lines.arr[cursor_pos->line].string
-					.count;
+				cursor_pos->char_i = find_line_len(
+						&box->lines.arr[cursor_pos->line]);
 			}
 			size_t vline = line_chi_to_vline(box, *cursor_pos, NULL, 1);
 			box->cursor.cursor_x_target = 0;
@@ -588,8 +552,8 @@ static void handle_cursor_move(text_box_t* box, editor_code_t move) {
 		}
 		case CODE_RIGHT:
 		{
-			size_t old_line_len = box->lines.arr[cursor_pos->line].string 
-				.count;
+			size_t old_line_len = find_line_len(
+					&box->lines.arr[cursor_pos->line]);
 			if (cursor_pos->char_i == old_line_len
 					&& cursor_pos->line == box->lines.count - 1)
 				break;
@@ -621,18 +585,19 @@ static void handle_cursor_move(text_box_t* box, editor_code_t move) {
 			if (move == CODE_UP || move == CODE_LEFT || move == CODE_PAGE_UP) {
 				// include previous first char of selection in changes since the
 				// left margin needs to be printed over 
-				line_t* old_line = &box->lines.arr[old_cursor.line];
+				const line_t* const old_line = &box->lines.arr[old_cursor.line];
+				const size_t old_line_len = find_line_len(old_line);
 				// increment changes_end
 				// <= because that's allowed (due to the cursor)
-				if (old_cursor.char_i + 1 <= old_line->string.count) {
+				if (old_cursor.char_i + 1 <= old_line_len) {
 					++box->redraw_areas.changes_end.char_i;
 				} else {
 					box->redraw_areas.changes_end.char_i = 0;
 					box->redraw_areas.changes_end.line = old_cursor.line + 1;
-					if (old_cursor.char_i == old_line->string.count
+					if (old_cursor.char_i == old_line_len
 							&& old_cursor.line + 1 < box->lines.count
-							&& 1 < box->lines.arr[old_cursor.line + 1]
-							.string.count) {
+							&& 1 < find_line_len(
+								&box->lines.arr[old_cursor.line + 1])) {
 						// we were in the next vline due to cursor overflow so 
 						// we need to redraw the first char of the next line 
 						// (which exists) as well
@@ -642,15 +607,16 @@ static void handle_cursor_move(text_box_t* box, editor_code_t move) {
 			} else {
 				// include character after new cursor (first char in sel) as
 				// well, in order to clear the left margin
-				line_chi_t* c_end = &box->redraw_areas.changes_end;
-				line_t* cur_line = &box->lines.arr[c_end->line];
-				if (c_end->char_i + 1 <= cur_line->string.count) {
+				line_chi_t* const c_end = &box->redraw_areas.changes_end;
+				line_t* const cur_line = &box->lines.arr[c_end->line];
+				const size_t cur_line_len = find_line_len(cur_line);
+				if (c_end->char_i + 1 <= cur_line_len) {
 					++c_end->char_i;
 				} else {
-					if (c_end->char_i == cur_line->string.count
+					if (c_end->char_i == cur_line_len
 							&& c_end->line + 1 < box->lines.count
-							&& 1 < box->lines.arr[c_end->line + 1]
-							.string.count) {
+							&& 1 < find_line_len(
+								&box->lines.arr[c_end->line + 1])) {
 						// we were in the next vline due to cursor overflow so 
 						// we need to redraw the first char of the next line 
 						// (which exists) as well
@@ -702,7 +668,7 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	} else {
 		const line_t* last_line = DYN_ARR_LAST(&box->lines);
 		const size_t last_vline =
-			last_line->vline_begin + last_line->count_softbreaks;
+			last_line->vline_begin + count_softbreaks(box, last_line);
 		// saturate target_vline at last_vline
 		if (current_vline + n > last_vline) {
 			target_vline = last_vline;
@@ -720,27 +686,17 @@ static void	handle_cursor_move_vertical(text_box_t* box, int move) {
 	if (*cursor_x_target > target_x)
 		target_x = *cursor_x_target;
 
-	line_t* new_line = &lines->arr[new_line_i];
-	size_t count_softbreaks_new;
-	const unsigned char* vline_lens_new = // vline starts of new line of cursor
-		get_vline_lens(new_line, &count_softbreaks_new);
-	size_t* vline_starts_new = (size_t*) malloc((count_softbreaks_new + 1) 
-			* sizeof(size_t));
-	if (!vline_starts_new) {
-		display_fatal_error(MSG_ENOMEM);
-	}
-	vline_lens_to_starts(vline_lens_new, vline_starts_new, 
-			count_softbreaks_new);
+	const line_t* const new_line = &lines->arr[new_line_i];
+	const size_t new_line_len = find_line_len(new_line);
 
 	// figure out cursor_pos.char_i
 	// index in line of first char in vline
-	size_t begin_i = vline_starts_new[new_vline_offs]; 
-	free(vline_starts_new);
+	size_t begin_i = vline_offset_to_char_i(box, new_line, new_vline_offs);
 	// number of chars in vline
-	size_t vline_length = new_line->string.count - begin_i;
+	size_t vline_length = new_line_len - begin_i;
 	if (target_x >= vline_length) { // there is no char at x pos in the vline,
 		// cursor_pos->char_i is after last char in line
-		cursor_pos->char_i = new_line->string.count;
+		cursor_pos->char_i = new_line_len;
 		// store ideal column as cursor_x_target
 		if (vline_length < box->width) {
 			*cursor_x_target = target_x;
@@ -919,20 +875,21 @@ char line_chi_to_char_point(const text_box_t* box, line_chi_t line_chi,
 static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	// find vline of begin
 	dyn_arr_line_t* lines = &box->lines;
-	size_t vline = line_chi_to_vline(box, begin, NULL, 0);
-	line_t* line = &lines->arr[begin.line];
+	const line_t* const line = &lines->arr[begin.line];
 
-	// recalculate vline_index of line, starting from vline's successor
-	ptrdiff_t offset = recalculate_vline_index(box, line, vline - 
-		line->vline_begin);
+	const size_t line_last_vline 
+		= line->vline_begin + count_softbreaks(box, line);
 	// shift all subsequent vline_indices if necessary
-	char shifted = offset != 0;
+	char shifted = 0;
+	if (begin.line + 1 < lines->count) {
+		shifted = line_last_vline + 1 != lines->arr[begin.line + 1].vline_begin;
+	}
 	for (size_t line_i = begin.line + 1;
 			line_i < lines->count; 
 			++line_i) {
 		line_t* last_line = &lines->arr[line_i - 1];
 		size_t new_vline_begin = last_line->vline_begin 
-			+ last_line->count_softbreaks + 1;
+			+ count_softbreaks(box, last_line);
 		line_t* shift_line = &lines->arr[line_i];
 		ptrdiff_t offset = new_vline_begin - shift_line->vline_begin;
 		shifted |= offset != 0;
@@ -942,7 +899,8 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 	// scroll if necessary
 	size_t new_vline = line_chi_to_vline(box, box->cursor.position, NULL, 1);
 	line_t* last_line = DYN_ARR_LAST(lines);
-	size_t last_vline = last_line->count_softbreaks + last_line->vline_begin;
+	size_t last_vline = count_softbreaks(box, last_line) 
+		+ last_line->vline_begin;
 	if (last_vline < new_vline) {
 		// the cursor can be after the last line
 		last_vline = new_vline;
@@ -970,7 +928,7 @@ line_chi_t line_chi_decrement(const text_box_t* box, const line_chi_t* lc) {
 	line_chi_t lci = *lc; // inclusive end
 	if (lc->char_i == 0) {
 		--lci.line;
-		lci.char_i = box->lines.arr[lci.line].string.count;
+		lci.char_i = find_line_len(&box->lines.arr[lci.line]);
 	} else {
 		--lci.char_i;
 	}
@@ -987,7 +945,7 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 		size_t buf_size, line_chi_t* begin, line_chi_t* end) {
 	line_chi_t real_end;
 	line_chi_t abs_end = { box->lines.count - 1, 
-			DYN_ARR_LAST(&box->lines)->string.count };
+			find_line_len(DYN_ARR_LAST(&box->lines)) };
 	line_chi_min_max(end, &abs_end, &real_end, NULL);
 	if (box->lines.count == 0 
 			|| begin->line >= box->lines.count
@@ -1003,12 +961,28 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 	size_t buf_i = 0;
 	line_chi_t cl_pos = *begin;
 	line_t* current_line = &box->lines.arr[cl_pos.line];
-	for (;buf_i + 1 < buf_size
+	int last_char_was_read = 0;
+	for (; buf_i + 1 < buf_size
 			&& line_chi_greater_than(real_end, cl_pos); ++buf_i) {
+		int is_linebreak = 0;
+		if (!last_char_was_read && current_line->str) {
+			switch (is_line_end(current_line->str[cl_pos.char_i])) {
+				case LAST_CHAR:
+					last_char_was_read = 1;
+					break;
+				case AFTER_LINE_END:
+					is_linebreak = 1;
+					break;
+				default:
+					break;
+			}
+		} else {
+			is_linebreak = 1;
+		}
 		// correct cl_pos on linebreak
-		if (cl_pos.char_i >= current_line->string.count) {
-			// reached real_end of box
+		if (is_linebreak) {
 			if (cl_pos.line >= box->lines.count - 1) {
+				// reached real_end of box
 				break;
 			}
 			// continue with next line
@@ -1016,10 +990,11 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 			++cl_pos.line;
 			buf[buf_i] = '\n';
 			current_line = &box->lines.arr[cl_pos.line];
+			last_char_was_read = 0;
 			continue;
 		}
 
-		buf[buf_i] = current_line->string.arr[cl_pos.char_i];
+		buf[buf_i] = (current_line->str[cl_pos.char_i] & ~0x80);
 
 		++cl_pos.char_i;
 	}
@@ -1045,10 +1020,10 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 	if (begin->line == real_end.line) {
 		sum_chars += real_end.char_i - begin->char_i;
 	} else {
-		sum_chars += box->lines.arr[begin->line].string.count - begin->char_i 
+		sum_chars += find_line_len(&box->lines.arr[begin->line]) - begin->char_i 
 			+ 1; // +1 for line break
 		for (size_t i = begin->line + 1; i < real_end.line; ++i) {
-			sum_chars += box->lines.arr[i].string.count;
+			sum_chars += find_line_len(&box->lines.arr[i]);
 			sum_chars += 1; // for line break
 		}
 		sum_chars += real_end.char_i + 1;
@@ -1190,17 +1165,12 @@ char* get_debug_representation_of_box(text_box_t* box) {
 	cursor += sprintf(cursor, "#(line_cap): %lu, \n", box->lines.capacity);
 	size_t chars = 0;
 	size_t chars_cap = 0;
-	size_t d_vline_index = 0;
 	for (size_t i = 0; i < box->lines.count; ++i) {
-		chars += box->lines.arr[i].string.count;
-		chars_cap += box->lines.arr[i].string.capacity;
-		if (box->lines.arr[i].count_softbreaks > VLINE_INDEX_STATIC_ARR_SIZE) {
-			d_vline_index += box->lines.arr[i].count_softbreaks;
-		}
+		chars += find_line_len(&box->lines.arr[i]);
+		chars_cap += find_line_capacity(&box->lines.arr[i]);
 	}
 	cursor += sprintf(cursor, "#(chars): %lu, \n", chars);
 	cursor += sprintf(cursor, "#(chars_cap): %lu, \n", chars_cap);
-	cursor += sprintf(cursor, "#(d_vline_index): %lu, \n", d_vline_index);
 #else
 	cursor += sprintf(cursor, "{\n\tvvlines_begin: %lu,\n", box->vvlines_begin);
 	if (box->interaction_mode == CURSOR) {
@@ -1227,6 +1197,7 @@ char* get_debug_representation_of_box(text_box_t* box) {
 	cursor += sprintf(cursor, "\t\t]\n\t}\n");
 	cursor += sprintf(cursor, "}\n");
 #endif
+#undef A
 
 	if (strlen(str) >= len) {
 		sprintf(dbg_buf, "Debug buffer too small: %lu, %lu\n", 

@@ -4,12 +4,33 @@
 #include "line.h"
 #include "editor.h"
 
-const unsigned char* get_vline_lens(const line_t* line, 
-		size_t* count_softbreaks);
-unsigned char* get_vline_lens_mut(line_t* line, size_t* count_softbreaks);
-ptrdiff_t recalculate_vline_index(text_box_t* box, line_t* line,
-		size_t vline_offs);
-unsigned char* add_softbreak_to_index(line_t* current_line, unsigned char len);
+enum line_end_res {
+	BEFORE_END = 0, AFTER_LINE_END = 1, LAST_CHAR = 2
+};
+
+/**
+ * returns AFTER_LINE_END (=1) if c is after the last char, LAST_CHAR (=2) if 
+ * c is the last char and BEFORE_END (=0) otherwise. Note that it's possible
+ * that the last allcoated char in in a line will result in LAST_CHAR.
+ */
+static inline enum line_end_res is_line_end(char c) {
+	if ((c & ~0x80) == '\0') {
+		return AFTER_LINE_END;
+	} else if (c & 0x80) {
+		return LAST_CHAR;
+	} else {
+		return BEFORE_END;
+	}
+}
+
+/**
+ * returns the next index that begins a new vline, or the index of the end of
+ * the string. last will be set to 1 if index_old_vline_begin was the begin of
+ * the last vline in the line, and to 0 otherwise. In the case where last is set
+ * to 1, index_old_vline_begin will be returned.
+ */
+size_t get_next_vline_begin(const text_box_t* box, size_t index_old_vline_begin, 
+		const line_t* line, int* last);
 /**
  * if x isn't null, it is set to the char_point_t x value that line_chi
  * corresponds to. 
@@ -41,8 +62,12 @@ int compare_lines_vline_begin(const void* vline_void,
  * adds an empty line_t to box->lines
  */
 void add_new_line(text_box_t* box, size_t vline_begin);
-void vline_lens_to_starts(const unsigned char* lens, size_t starts[], 
-		size_t count_lens);
-void vline_starts_to_lens(unsigned char* lens, const size_t* starts, 
-		size_t count_lens);
+/**
+ * returns the number of softbreaks in line (i.e. #vlines - 1)
+ */
+size_t count_softbreaks(const text_box_t* box, const line_t* line);
+size_t char_i_to_vline_offset(const text_box_t* box, const line_t* line, 
+		size_t char_i, size_t* vline_begin_char);
+size_t vline_offset_to_char_i(const text_box_t* box, const line_t* line,
+		const size_t vline_offset);
 #endif // LINE_UTILS_H_

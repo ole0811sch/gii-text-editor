@@ -1,6 +1,8 @@
 #ifndef UTIL_H_
 #define UTIL_H_
 
+#include "stddef.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -83,5 +85,9 @@ void draw_separator(int bottom_px);
 
 extern char tmp_buf[256];
 
+/**
+ * returns 1 if all values in results are true, otherwise it returns 0
+ */
+int all_true(char* results, size_t results_len);
 
 #endif

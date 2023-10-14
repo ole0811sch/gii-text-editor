@@ -60,3 +60,12 @@ void draw_separator(int bottom_px) {
 	Bdisp_DrawLineVRAM(0, bottom_px - 1, 127, bottom_px - 1);
 	Bdisp_PutDispArea_DD(&line);
 }
+
+int all_true(char* results, size_t results_len) {
+	for (size_t i = 0; i < results_len; ++i) {
+		if (!results[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}

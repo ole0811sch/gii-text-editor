@@ -10,23 +10,10 @@ static int test_is_line_end(unsigned int base_indentation, void* _1, void* _2);
 
 int test_line_utils(unsigned int base_indentation, void* _1, void* _2) {
 	struct named_test tests[3];
-	tests[0].name = "test_find_line_len";
-	tests[0].supply_index = 0;
-	tests[0].supply_indentation = 1;
-	tests[0].f.id = &test_find_line_len;
-	tests[0].report_success = 1;
-	tests[1].name = "test_find_line_capacity";
-	tests[1].supply_index = 0;
-	tests[1].supply_indentation = 1;
-	tests[1].f.id = &test_find_line_capacity;
-	tests[1].report_success = 1;
-	tests[2].name = "test_is_line_end";
-	tests[2].supply_index = 0;
-	tests[2].supply_indentation = 1;
-	tests[2].f.id = &test_is_line_end;
-	tests[2].report_success = 1;
-	return run_test_suite(NULL, tests, ARR_LEN(tests), 
-			base_indentation, 0, 0, 0, 0);
+	tests[0] = CREATE_TEST_ID(test_find_line_len);
+	tests[1] = CREATE_TEST_ID(test_find_line_capacity);
+	tests[2] = CREATE_TEST_ID(test_is_line_end);
+	return run_test_suite_nrnanmrs(tests, ARR_LEN(tests), base_indentation);
 }
 
 static int test_find_line_len(unsigned int base_indentation, void* _1, 
@@ -58,14 +45,8 @@ static int test_find_line_len(unsigned int base_indentation, void* _1,
 	str[2] = '\t';
 	str[3] = 'a' | (char) 0x80;
 	results[6] = find_line_len(&line) == 4;
-	struct named_test test;
-	test.name = NULL;
-	test.supply_indentation = 0;
-	test.supply_index = 1;
-	test.f.ix = &test_char_true;
-	test.report_success = 0;
-	return run_test_suite("test_find_line_len", &test, ARR_LEN(results),
-			base_indentation, 0, 1, results, NULL);
+	return run_test_suite_check_results(results, ARR_LEN(results), 
+			base_indentation);
 }
 
 static int test_find_line_capacity(unsigned int base_indentation, 
@@ -97,14 +78,9 @@ static int test_find_line_capacity(unsigned int base_indentation,
 	str[2] = 'a';
 	str[3] = 'a' | (char) 0x80;
 	results[1] = find_line_capacity(&line) == 4;
-	struct named_test test;
-	test.name = NULL;
-	test.supply_indentation = 0;
-	test.supply_index = 1;
-	test.f.ix = &test_char_true;
-	test.report_success = 0;
-	return run_test_suite("test_find_line_capacity", &test, ARR_LEN(results),
-			base_indentation, 0, 1, results, NULL);
+
+	return run_test_suite_check_results(results, ARR_LEN(results), 
+			base_indentation);
 }
 
 static int test_is_line_end(unsigned int base_indentation, void* _1, void* _2) {
@@ -128,12 +104,6 @@ static int test_is_line_end(unsigned int base_indentation, void* _1, void* _2) {
 	results[7] = !is_line_end(str, 1);
 	results[8] = is_line_end(str, 2);
 
-	struct named_test test;
-	test.name = NULL;
-	test.supply_indentation = 0;
-	test.supply_index = 1;
-	test.f.ix = &test_char_true;
-	test.report_success = 0;
-	return run_test_suite("test_find_line_capacity", &test, ARR_LEN(results),
-			base_indentation, 0, 1, results, NULL);
+	return run_test_suite_check_results(results, ARR_LEN(results), 
+			base_indentation);
 }

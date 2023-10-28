@@ -202,7 +202,7 @@ void initialize_lines(text_box_t* box, const char* str) {
 		else {
 			// only check if col is out of bounds before reading new char. This
 			// prevents unnecessary soft breaks before '\n' and EOF
-			if (col >= EDITOR_COLUMNS) { 
+			if (col >= box->width) { 
 				col = 0;
 				++vline;
 			}

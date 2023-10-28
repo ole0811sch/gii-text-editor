@@ -5,13 +5,8 @@
 
 int test_bt_char(unsigned int base_indentation, void* _1, void* _2) {
 	struct named_test tests[1];
-	tests[0].name = "test_bt_strcmp";
-	tests[0].supply_index = 0;
-	tests[0].supply_indentation = 1;
-	tests[0].f.id = &test_bt_strcmp;
-	tests[0].report_success = 1;
-	return run_test_suite(NULL, tests, ARR_LEN(tests), base_indentation, 0, 0,
-			NULL, NULL);
+	tests[0] = CREATE_TEST_ID(test_bt_strcmp);
+	return run_test_suite_nrnanmrs(tests, ARR_LEN(tests), base_indentation);
 }
 
 int test_bt_strcmp(unsigned int base_indentation, void* _1, void* _2) {
@@ -33,12 +28,6 @@ int test_bt_strcmp(unsigned int base_indentation, void* _1, void* _2) {
 	results[8] = bt_strcmp(NULL, s0) < 0;
 	results[9] = bt_strcmp(NULL, NULL) == 0;
 
-	struct named_test test;
-	test.name = NULL;
-	test.supply_indentation = 0;
-	test.supply_index = 1;
-	test.f.ix = &test_char_true;
-	test.report_success = 0;
-	return run_test_suite(NULL, &test, ARR_LEN(results),
-			base_indentation, 0, 1, results, NULL);
+	return run_test_suite_check_results(results, ARR_LEN(results),
+			base_indentation);
 }

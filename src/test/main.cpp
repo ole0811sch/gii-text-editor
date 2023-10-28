@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
 
 static struct named_test create_test(const char* name, 
 		char supply_indentation, char supply_index, 
-		void* f) {
+		void (*f)(void)) {
 	struct named_test test;
 	test.name = name;
 	test.supply_indentation = supply_indentation;
@@ -48,21 +48,21 @@ static struct named_test create_test(const char* name,
 }
 
 struct named_test create_test_f(const char* name, int (*f)(void*, void*)) {
-	return create_test(name, 0, 0, (void*) f);
+	return create_test(name, 0, 0, (void(*)(void)) f);
 }
 
 struct named_test create_test_id(const char* name, int (*id)(unsigned int, 
 			void*, void*)) {
-	return create_test(name, 1, 0, (void*) id);
+	return create_test(name, 1, 0, (void(*)(void)) id);
 }
 
 struct named_test create_test_ix(const char* name, int (*ix)(void*, void*,
 			unsigned int)) {
-	return create_test(name, 0, 1, (void*) ix);
+	return create_test(name, 0, 1, (void(*)(void)) ix);
 }
 
 struct named_test create_test_ix_id(const char* name, int (*ix_id)(unsigned int, 
 			void*, void*,
 			unsigned int)) {
-	return create_test(name, 1, 1, (void*) ix_id);
+	return create_test(name, 1, 1, (void(*)(void)) ix_id);
 }

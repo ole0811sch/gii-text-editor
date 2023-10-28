@@ -4,13 +4,19 @@
 #include "editor.h"
 #include "main.h"
 
+static int test_count_softbreaks(unsigned int bi, void* _1, void* _2);
+static int test_initialize_text_box(unsigned int bi, void* _1, void* _2);
+static int test_update_changes_from(unsigned int bi, void* _1, void* _2);
+
 int test_editor(unsigned int base_indentation, void* _1, void* _2) {
-	struct named_test tests[1];
+	struct named_test tests[3];
 	tests[0] = CREATE_TEST_ID(test_initialize_text_box);
+	tests[1] = CREATE_TEST_ID(test_count_softbreaks);
+	tests[2] = CREATE_TEST_ID(test_update_changes_from);
 	return run_test_suite_nrnanmrs(tests, ARR_LEN(tests), base_indentation);
 }
 
-int test_initialize_text_box(unsigned int base_indentation, void* _1, void* _2) {
+static int test_initialize_text_box(unsigned int bi, void* _1, void* _2) {
 	text_box_t box;
 	initialize_text_box(12, 34, 10, 5, CURSOR, 1, 
 			"0123456789ABCDEFGHIJ\n012\n\n0123456789\n", &box);
@@ -41,12 +47,12 @@ int test_initialize_text_box(unsigned int base_indentation, void* _1, void* _2) 
 		&& box.lines.arr[4].vline_begin == 5;
 
 	return run_test_suite_check_results(results, ARR_LEN(results), 
-			base_indentation);
+			bi);
 }
 
-int test_count_softbreaks(unsigned int base_indentation, void* _1, void* _2) {
+static int test_count_softbreaks(unsigned int bi, void* _1, void* _2) {
 	text_box_t box;
-	initialize_text_box(12, 34, 32, 10, CURSOR, 1,
+	initialize_text_box(12, 34, 10, 10, CURSOR, 1,
 			"0123456789ABCDEFGHIJ\n012\n\n0123456789ABCDEFGHIJ012345678\n", 
 			&box);
 	char results[5];
@@ -57,5 +63,30 @@ int test_count_softbreaks(unsigned int base_indentation, void* _1, void* _2) {
 	results[4] = count_softbreaks(&box, &box.lines.arr[4]) == 0;
 
 	return run_test_suite_check_results(results, ARR_LEN(results), 
-			base_indentation);
+			bi);
+}
+
+static int test_update_changes_from(unsigned int bi, void* _1, void* _2) {
+	text_box_t box;
+	initialize_text_box(12, 34, 10, 10, CURSOR, 1,
+			"0123456789ABCDEFGHIJ\n012\n\n0123456789ABCDEFGHIJ012345678\n", 
+			&box);
+	char results[2];
+	line_add(&box.lines.arr[0], 'a');
+	line_chi_t lc0 = { 0, 19 };
+	update_changes_from(&box, lc0);
+	results[0] = box.lines.arr[0].vline_begin == 0
+		&& box.lines.arr[1].vline_begin == 3
+		&& box.lines.arr[2].vline_begin == 4
+		&& box.lines.arr[3].vline_begin == 5
+		&& box.lines.arr[4].vline_begin == 8;
+	line_add(&box.lines.arr[0], 'a');
+	line_chi_t lc1 = { 0, 20 };
+	update_changes_from(&box, lc1);
+	results[1] = box.lines.arr[0].vline_begin == 0
+		&& box.lines.arr[1].vline_begin == 3
+		&& box.lines.arr[2].vline_begin == 4
+		&& box.lines.arr[3].vline_begin == 5
+		&& box.lines.arr[4].vline_begin == 8;
+	return run_test_suite_check_results(results, ARR_LEN(results), bi);
 }

@@ -7,16 +7,16 @@
 
 size_t get_next_vline_begin(const text_box_t* box, size_t index_old_vline_begin, 
 		const line_t* line, int* last) {
-	size_t i;
-	for (i = index_old_vline_begin;
-			i < index_old_vline_begin + box->width; ++i) {
+	for (size_t i = index_old_vline_begin;; ++i) {
 		if (is_line_end(line->str, i)) {
 			*last = 1;
 			return index_old_vline_begin;
 		}
+		if (i >= index_old_vline_begin + box->width) {
+			*last = 0;
+			return i;
+		}
 	}
-	*last = 0;
-	return i;
 }
 
 size_t count_softbreaks(const text_box_t* box, const line_t* line) {

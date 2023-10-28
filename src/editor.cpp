@@ -864,7 +864,7 @@ char line_chi_to_char_point(const text_box_t* box, line_chi_t line_chi,
 }
 
 /**
- * updates vline_indices and cursor according to a change that starts at
+ * updates vline_begins of lines and cursor according to a change that starts at
  * begin. begin is used to determine the last vline whose index in vline_index
  * is still correct. The cursor should be at the correct position already, 
  * to determine if scrolling is necessary. 
@@ -888,11 +888,10 @@ static void update_changes_from(text_box_t* box, line_chi_t begin) {
 			++line_i) {
 		line_t* last_line = &lines->arr[line_i - 1];
 		size_t new_vline_begin = last_line->vline_begin 
-			+ count_softbreaks(box, last_line);
+			+ count_softbreaks(box, last_line) + 1;
 		line_t* shift_line = &lines->arr[line_i];
-		ptrdiff_t offset = new_vline_begin - shift_line->vline_begin;
-		shifted |= offset != 0;
-		shift_line->vline_begin += offset;
+		shifted |= (new_vline_begin != shift_line->vline_begin);
+		shift_line->vline_begin = new_vline_begin;
 	}
 
 	// scroll if necessary

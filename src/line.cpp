@@ -118,7 +118,7 @@ int line_pop_some(line_t* line, size_t n) {
 }
 
 /**
- * the MSB in every char in char will not be copied.
+ * the MSB in every char in chars will not be copied.
  * index will be set to len(line) if it's larger than that.
  */
 int line_insert_some(line_t* line, const char* chars, size_t n, size_t index) {

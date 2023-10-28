@@ -116,7 +116,7 @@ static inline int run_test_suite(const char* suite_name,
 				res = tests[i_].f.f(arg1, arg2);
 			}
 		}
-		if (!res && report_success) {
+		if (!res && !report_success) {
 			indent(base_indentation + 1);
 			if (tests[i_].name) {
 				printf("Test \"%s\":\n", tests[i_].name);

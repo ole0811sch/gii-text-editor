@@ -163,10 +163,9 @@ void initialize_lines(text_box_t* box, const char* str) {
 	if(dyn_arr_line_create(10, &box->lines) == -1)
 		display_fatal_error(MSG_ENOMEM);
 
-	add_new_line(box, 0);
-
 // #define A
 #ifdef A
+	add_new_line(box, 0);
 	insert_string(box, str, 0);
 #endif
 	
@@ -961,26 +960,9 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 	size_t buf_i = 0;
 	line_chi_t cl_pos = *begin;
 	line_t* current_line = &box->lines.arr[cl_pos.line];
-	int last_char_was_read = 0;
 	for (; buf_i + 1 < buf_size
 			&& line_chi_greater_than(real_end, cl_pos); ++buf_i) {
-		int is_linebreak = 0;
-		if (!last_char_was_read && current_line->str) {
-			switch (is_line_end(current_line->str[cl_pos.char_i])) {
-				case LAST_CHAR:
-					last_char_was_read = 1;
-					break;
-				case AFTER_LINE_END:
-					is_linebreak = 1;
-					break;
-				default:
-					break;
-			}
-		} else {
-			is_linebreak = 1;
-		}
-		// correct cl_pos on linebreak
-		if (is_linebreak) {
+		if (is_line_end(current_line->str, cl_pos.char_i)) {
 			if (cl_pos.line >= box->lines.count - 1) {
 				// reached real_end of box
 				break;
@@ -990,7 +972,6 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 			++cl_pos.line;
 			buf[buf_i] = '\n';
 			current_line = &box->lines.arr[cl_pos.line];
-			last_char_was_read = 0;
 			continue;
 		}
 
@@ -1001,10 +982,10 @@ size_t get_text_box_partial_string(const text_box_t* box, char buf[],
 
 	
 	if (!line_chi_greater_than(real_end, cl_pos)) { 
-		// cl_pos >= real_end, i.e. we wrote every char. There's also one guaranteed
-		// index for NULL terminator due to the condition in the for loop
-		// (except when buf_size == 0).
-		// This index is buf_i since we always increment buf_i after we write.
+		// cl_pos >= real_end, i.e. we wrote every char. There's also one
+		// guaranteed index for NULL terminator due to the condition in the 
+		// for loop (except when buf_size == 0). This index is buf_i since 
+		// we always increment buf_i after we write.
 		if (buf_size > 0) {
 			buf[buf_i] = '\0';
 		}

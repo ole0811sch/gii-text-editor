@@ -28,8 +28,7 @@ clean:
 	cd ../mockup/ && $(MAKE) clean
 
 test: $(TESTBLDDIR)/test.out
-	$(eval TEST_RESULT = $(shell ./$^ > /dev/null; echo $$?))
-	@printf "\nTest suite exited with code $(TEST_RESULT)\n\n"
+	./$^
 
 make_debug:
 	@echo "TEST_OBJ_REGULAR: $(TEST_OBJ_REGULAR)"

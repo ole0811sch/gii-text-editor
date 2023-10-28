@@ -1,6 +1,9 @@
 #include "../commands.cpp"
 
 #include "assert.h"
+#include "main.h"
+
+static char test_parse_cli(unsigned int indentation);
 
 static cli_result_t create_pos_cli_result(enum CLIResultType type, size_t begin,
 		size_t end) {
@@ -36,11 +39,19 @@ static char cli_result_equals(cli_result_t a, cli_result_t b) {
 	}
 }
 
-int test_commands(void) {
-	return test_parse_cli();
+int test_commands(unsigned int indentation, void* _1, void* _2) {
+	return test_parse_cli(indentation);
 }
 
-char test_parse_cli(void) {
+static int test_parse_cli_atomic(void* cls, void* results,
+		unsigned int i) {
+	const char** cls_ = (const char**) cls;
+	const cli_result_t* results_ = (const cli_result_t*) results;
+	return cli_result_equals(parse_cli(cls_[i]), 
+			results_[i]);
+}
+
+static char test_parse_cli(unsigned int indentation) {
 #define num_tests 11
 	const char* const cls[] = { "e file.txt",
 		"w file.txt", 
@@ -68,12 +79,14 @@ char test_parse_cli(void) {
 	results[8] = create_neg_cli_result(TOO_MANY_ARGS);
 	results[9] = create_neg_cli_result(INVALID_CMD);
 	results[10] = create_neg_cli_result(NO_CMD);
-
-	for (size_t i = 0; i < num_tests; ++i) {
-		if (!cli_result_equals(parse_cli(cls[i]), results[i])) {
-			return 0;
-		}
-	}
-	return 1;
+	
+	struct named_test test;
+	test.name = NULL;
+	test.supply_indentation = 0;
+	test.supply_index = 1;
+	test.f.ix = &test_parse_cli_atomic;
+	test.report_success = 0;
+	return run_test_suite(NULL, &test, num_tests, indentation, 0, 1, 
+			(void*) cls, (void*) results);
 #undef num_tests
 }

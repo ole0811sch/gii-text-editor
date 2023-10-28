@@ -1,6 +1,7 @@
 #ifndef LINE_H_
 #define LINE_H_
 
+#include "bt_char.h"
 #include "dyn_arrs.h"
 
 typedef struct {
@@ -15,7 +16,7 @@ typedef struct {
 	 * is legal to have zero '\0' bytes, i.e. an '\n'-terminated string. It may
 	 * also be NULL to signal an empty line.
 	 */
-	char* str;
+	bt_char_t* str;
 } line_t;
 
 void destruct_line(line_t* line);

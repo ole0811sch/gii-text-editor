@@ -1,11 +1,8 @@
-#ifndef SAVING_H_
-#define SAVING_H_
+#ifndef COMMANDS_H_
+#define COMMANDS_H_
 
 #include "editor.h"
 
 void open_command_line(text_box_t* editor);
 
-
-char test_parse_cli(void);
-
-#endif // SAVING_H_
+#endif // COMMANDS_H_

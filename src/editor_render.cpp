@@ -286,13 +286,7 @@ static int print_partial_line(const text_box_t* box, line_chi_t line_chi) {
 
 
 	// print chars of each vline 
-
-	int last_char_was_read = 0;
-	while (line->str
-			&& !last_char_was_read 
-			&& is_line_end(line->str[char_i]) != AFTER_LINE_END 
-			&& vline < vvlines_local_end) {
-		last_char_was_read = (is_line_end(line->str[char_i]) == LAST_CHAR);
+	while (!is_line_end(line->str, char_i) && vline < vvlines_local_end) {
 		if (x >= box->width) { // next vline
 			x = 0;
 			++vline;

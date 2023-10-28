@@ -7,21 +7,12 @@
 
 size_t get_next_vline_begin(const text_box_t* box, size_t index_old_vline_begin, 
 		const line_t* line, int* last) {
-	if (!line->str) {
-		*last = 1;
-		return index_old_vline_begin;
-	}
-
 	size_t i;
 	for (i = index_old_vline_begin;
 			i < index_old_vline_begin + box->width; ++i) {
-		switch (is_line_end(line->str[i])) {
-			case AFTER_LINE_END:
-			case LAST_CHAR:
-				*last = 1;
-				return index_old_vline_begin;
-			default:
-				break;
+		if (is_line_end(line->str, i)) {
+			*last = 1;
+			return index_old_vline_begin;
 		}
 	}
 	*last = 0;
@@ -157,3 +148,4 @@ int compare_lines_vline_begin(const void* vline_void,
 		return 1;
 	return 0;
 }
+

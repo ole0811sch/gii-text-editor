@@ -1,27 +1,10 @@
 #ifndef LINE_UTILS_H_
 #define LINE_UTILS_H_
 
+#include "bt_char.h"
 #include "line.h"
 #include "editor.h"
 
-enum line_end_res {
-	BEFORE_END = 0, AFTER_LINE_END = 1, LAST_CHAR = 2
-};
-
-/**
- * returns AFTER_LINE_END (=1) if c is after the last char, LAST_CHAR (=2) if 
- * c is the last char and BEFORE_END (=0) otherwise. Note that it's possible
- * that the last allcoated char in in a line will result in LAST_CHAR.
- */
-static inline enum line_end_res is_line_end(char c) {
-	if ((c & ~0x80) == '\0') {
-		return AFTER_LINE_END;
-	} else if (c & 0x80) {
-		return LAST_CHAR;
-	} else {
-		return BEFORE_END;
-	}
-}
 
 /**
  * returns the next index that begins a new vline, or the index of the end of

@@ -309,13 +309,22 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 	// the strings between the linebreaks in str to the current line. After
 	// the str has been completely added, append the old suffix from the
 	// first line to the current line
-	const size_t suffix_len = find_line_len(line) - cursor_pos->char_i;
+	size_t line_len = find_line_len(line);
+	size_t cursor_chi = cursor_pos->char_i;
+	if (cursor_chi > line_len) {
+#ifdef MOCKUP
+		Print((const unsigned char*) "editor.cpp, insert_string: cursor_chi "
+				"> line_len");
+#endif
+		cursor_chi = line_len;
+	}
+	const size_t suffix_len = line_len - cursor_chi;
 	char* suffix = (char*) malloc(suffix_len);
 	if (!suffix && suffix_len > 0) {
 		display_error(MSG_ENOMEM);
 		return;
 	}
-	memcpy(suffix, &line->str[cursor_pos->char_i], suffix_len);
+	memcpy(suffix, &line->str[cursor_chi], suffix_len);
 	if (line_pop_some(line, suffix_len) == -1) {
 		display_error(MSG_ENOMEM);
 		free(suffix);
@@ -362,7 +371,7 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 			cur->vline_begin = 0;
 			cur->str = NULL;
 			size_t new_cap;
-			if (line_ensure_capacity(line, 0, 0, str_part_len, &new_cap) 
+			if (line_ensure_capacity(cur, 0, 0, str_part_len, &new_cap) 
 					== -1) {
 				free(suffix);
 				abort_model_change(box, MSG_ENOMEM);
@@ -380,7 +389,7 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 		str_part = next_br + 1;
 	} while (!reached_end);
 
-	const size_t cursor_char_i = find_line_len(cur);
+	const size_t new_cursor_chi = find_line_len(cur);
 	// add suffix to last line
 	if (line_add_all(cur, suffix, suffix_len) == -1) {
 		display_error(MSG_ENOMEM);
@@ -392,7 +401,7 @@ static void insert_string(text_box_t* box, const char* str, int move_cursor) {
 	}
 	if (move_cursor) {
 		cursor_pos->line = cur_i;
-		cursor_pos->char_i = cursor_char_i;
+		cursor_pos->char_i = new_cursor_chi;
 	}
 	update_changes_from(box, changes_begin);
 	

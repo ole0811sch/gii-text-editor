@@ -42,7 +42,7 @@
  * DYN_ARR_CG_GROWTH_NUMERATOR and 
  * DYN_ARR_CG_GROWTH_DENOMINATOR (optional): the next bigger 
  * capacity nc is calculated as old_capacity * ...NUMERATOR / ...DENOMINATOR
- * (default 2 and 1).
+ * (default 4 and 3).
  *
  * Example usage:
  *
@@ -124,10 +124,10 @@
 #endif // DYN_ARR_CG_SHRINK_THRESHOLD_DENOMINATOR 
 
 #ifndef DYN_ARR_CG_GROWTH_NUMERATOR 
-#define DYN_ARR_CG_GROWTH_NUMERATOR 3
+#define DYN_ARR_CG_GROWTH_NUMERATOR 4
 #endif // DYN_ARR_CG_GROWTH_NUMERATOR 
 #ifndef DYN_ARR_CG_GROWTH_DENOMINATOR 
-#define DYN_ARR_CG_GROWTH_DENOMINATOR 4
+#define DYN_ARR_CG_GROWTH_DENOMINATOR 3
 #endif // DYN_ARR_CG_GROWTH_DENOMINATOR 
 
 #define PFX DYN_ARR_CG_STATIC

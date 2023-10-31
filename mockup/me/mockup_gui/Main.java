@@ -132,7 +132,7 @@ public class Main {
 	public static byte[] call_GetKey(byte[] args) {
 		int isChar = 1;
 		try {
-			Thread.sleep(500);
+			Thread.sleep(50);
 		} catch (InterruptedException e) {
 		}
 		int code;

@@ -8,15 +8,7 @@ import me.build.mockup_gui.*;
 public class Main {
 	private static int SCREEN_WIDTH;
 	private static int SCREEN_HEIGHT;
-	private static final int[] keycode_seq = new int[]{ 
-		KeyBios.KEY_CTRL_F3_,
-		KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DOWN_,
-		KeyBios.KEY_CTRL_DEL_,
-	};
+	private static final int[] keycode_seq = me.mockup_gui.Input.keycode_seq;	
 	private static int seq_i = 0;
 	public static final Object sem = new Object();
 

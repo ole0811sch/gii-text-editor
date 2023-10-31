@@ -34,6 +34,9 @@ size_t line_chi_to_vline(const text_box_t* box, line_chi_t line_chi,
 void line_chi_min_max(const line_chi_t* a, const line_chi_t* b, line_chi_t* min, 
 		line_chi_t* max);
 int line_chi_greater_than(line_chi_t a, line_chi_t b);
+int line_chi_greater_equals(line_chi_t a, line_chi_t b);
+int line_chi_less_equals(line_chi_t a, line_chi_t b);
+int line_chi_less_than(line_chi_t a, line_chi_t b);
 int line_chi_equals(line_chi_t a, line_chi_t b);
 /**
  * vline_void is a pointer to a (size_t) vline.
@@ -49,6 +52,11 @@ void add_new_line(text_box_t* box, size_t vline_begin);
  * returns the number of softbreaks in line (i.e. #vlines - 1)
  */
 size_t count_softbreaks(const text_box_t* box, const line_t* line);
+/**
+ * if vline_begin_char isn't NULL, it will be set to the index of the first char
+ * of that vline. The offset of the vline in which char_i is located will be 
+ * returned.
+ */
 size_t char_i_to_vline_offset(const text_box_t* box, const line_t* line, 
 		size_t char_i, size_t* vline_begin_char);
 size_t vline_offset_to_char_i(const text_box_t* box, const line_t* line,

@@ -33,34 +33,27 @@ size_t count_softbreaks(const text_box_t* box, const line_t* line) {
 	return sbreaks;
 }
 
-/**
- * if vline_begin_char isn't NULL, it will be set to the index of the first char
- * of that vline. The offset of the vline in which char_i is located will be 
- * returned.
- */
 size_t char_i_to_vline_offset(const text_box_t* box, const line_t* line, 
 		size_t char_i, size_t* vline_begin_char) {
-	size_t vline_begin_char_old = 0;
-	size_t vline_begin_char_cur = 0;
-	size_t vline_index = 0;
+	size_t vline_begin_char_old = 0;	// char_i of first char of vline_index--
+	size_t vline_begin_char_cur = 0;	// char_i of first char of vline_index
+	size_t vline_index = 0;	// index of the last vline we have the begin ind. of
 	int last = 0;
-	while (1) {
-		if (char_i < vline_begin_char_cur) {
+	while (1) {	// iterate over all vline beginnings
+		vline_begin_char_cur = get_next_vline_begin(box, vline_begin_char_cur, 
+				line, &last);
+		++vline_index;
+		if (last || char_i < vline_begin_char_cur) { 
+			// char_i must be in this vline
 			break;
 		}
 
 		vline_begin_char_old = vline_begin_char_cur;
-		vline_begin_char_cur = get_next_vline_begin(box, vline_begin_char_cur, 
-				line, &last);
-		if (last) {
-			break;
-		}
-		++vline_index;
 	}
 	if (vline_begin_char) {
 		*vline_begin_char = vline_begin_char_old;
 	}
-	return vline_index;
+	return vline_index - 1;
 }
 
 size_t vline_offset_to_char_i(const text_box_t* box, const line_t* line,
@@ -89,14 +82,14 @@ size_t line_chi_to_vline(const text_box_t* box, line_chi_t line_chi,
 	size_t tentative_vline;
 
 
-	size_t vline_begin_char_old = 0;
+	size_t vline_begin_char_old;	// char_i of first char in vline of line_chi
 	size_t vline_index = char_i_to_vline_offset(box, line, line_chi.char_i,
 			&vline_begin_char_old);
 
 	tentative_x = line_chi.char_i - vline_begin_char_old;
 	tentative_vline = vline_index + line->vline_begin;
 
-	if (cursor_mode && tentative_x >= EDITOR_COLUMNS) {
+	if (cursor_mode && tentative_x >= box->width) {
 		// use first char in next vline
 		if (x != NULL) {
 			*x = 0;
@@ -133,6 +126,18 @@ void line_chi_min_max(const line_chi_t* a, const line_chi_t* b, line_chi_t* min,
 
 int line_chi_greater_than(line_chi_t a, line_chi_t b) {
 	return a.line > b.line || (a.line == b.line && a.char_i > b.char_i);
+}
+
+int line_chi_greater_equals(line_chi_t a, line_chi_t b) {
+	return !line_chi_greater_than(b, a);
+}
+
+int line_chi_less_than(line_chi_t a, line_chi_t b) {
+	return line_chi_greater_than(b, a);
+}
+
+int line_chi_less_equals(line_chi_t a, line_chi_t b) {
+	return !line_chi_greater_than(a, b);
 }
 
 int line_chi_equals(line_chi_t a, line_chi_t b) {

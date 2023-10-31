@@ -54,7 +54,7 @@ static void abort_model_change(text_box_t* box, const char* msg);
 /**
  * sets box->redraw_areas to a state that states that nothing has changed and
  * otherwise reflects the current editor state (in particular old_cursor =
- * cursor.position and selection_cursor is set
+ * cursor.position and selection_cursor is set to the correct value)
  */
 static void reinit_changes(text_box_t* box) {
 	redraw_areas_t* ras = &box->redraw_areas;

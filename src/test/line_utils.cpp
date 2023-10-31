@@ -1,4 +1,6 @@
 #include "../line_utils.cpp"
+
+#include "../editor.h"
 #include "line_utils.h"
 #include <string.h>
 #include "../util.h"
@@ -7,12 +9,14 @@
 static int test_find_line_len(unsigned int, void* _1, void* _2);
 static int test_find_line_capacity(unsigned int, void* _1, void* _2);
 static int test_is_line_end(unsigned int base_indentation, void* _1, void* _2);
+static int test_char_i_to_vline_offset(unsigned int indent, void* _, void* _1);
 
 int test_line_utils(unsigned int base_indentation, void* _1, void* _2) {
-	struct named_test tests[3];
+	struct named_test tests[4];
 	tests[0] = CREATE_TEST_ID(test_find_line_len);
 	tests[1] = CREATE_TEST_ID(test_find_line_capacity);
 	tests[2] = CREATE_TEST_ID(test_is_line_end);
+	tests[3] = CREATE_TEST_ID(test_char_i_to_vline_offset);
 	return run_test_suite_nrnanmrs(tests, ARR_LEN(tests), base_indentation);
 }
 
@@ -106,4 +110,41 @@ static int test_is_line_end(unsigned int base_indentation, void* _1, void* _2) {
 
 	return run_test_suite_check_results(results, ARR_LEN(results), 
 			base_indentation);
+}
+
+static int test_char_i_to_vline_offset(unsigned int indent, void* _, void* _1) {
+	text_box_t box;
+	initialize_text_box(0, 0, 3, 5, CURSOR, 1, "ab\nabc\n\nabcd\nabcdefgh", 
+			&box);
+	char results[11];
+	size_t vl_chi;
+	size_t vline;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[0], 0, &vl_chi);
+	results[0] = vline == 0 && vl_chi == 0;
+
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[1], 0, &vl_chi);
+	results[1] = vline == 0 && vl_chi == 0;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[1], 3, &vl_chi);
+	results[2] = vline == 0 && vl_chi == 0;
+
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[2], 0, &vl_chi);
+	results[3] = vline == 0 && vl_chi == 0;
+
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[3], 2, &vl_chi);
+	results[4] = vline == 0 && vl_chi == 0;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[3], 3, &vl_chi);
+	results[5] = vline == 1 && vl_chi == 3;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[3], 4, &vl_chi);
+	results[6] = vline == 1 && vl_chi == 3;
+
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[4], 1, &vl_chi);
+	results[7] = vline == 0 && vl_chi == 0;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[4], 4, &vl_chi);
+	results[8] = vline == 1 && vl_chi == 3;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[4], 7, &vl_chi);
+	results[9] = vline == 2 && vl_chi == 6;
+	vline = char_i_to_vline_offset(&box, &box.lines.arr[4], 8, &vl_chi);
+	results[10] = vline == 2 && vl_chi == 6;
+
+	return run_test_suite_check_results(results, ARR_LEN(results), indent);
 }

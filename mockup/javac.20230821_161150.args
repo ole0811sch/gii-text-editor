@@ -1,6 +1,0 @@
--Xdiags:verbose
--d
-Build/
---class-path
-me/
-me/build/mockup_gui/RFC.java
